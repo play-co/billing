@@ -13,6 +13,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 import com.tealeaf.plugin.IPlugin;
 import android.app.Activity;
@@ -21,7 +22,12 @@ import android.app.AlertDialog.Builder;
 import android.content.Intent;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.ServiceConnection;
 import android.util.Log;
+
+import android.content.ComponentName;
+import android.os.IBinder;
+import android.app.PendingIntent;
 
 import com.tealeaf.EventQueue;
 import com.tealeaf.event.*;
@@ -30,6 +36,7 @@ import com.android.vending.billing.IInAppBillingService;
 
 public class BillingPlugin implements IPlugin {
 	Context _ctx;
+	Activity _activity;
 	IInAppBillingService mService;
 	ServiceConnection mServiceConn;
 	static private final int BUY_REQUEST_CODE = 123450;
@@ -77,6 +84,8 @@ public class BillingPlugin implements IPlugin {
 	public void onCreate(Activity activity, Bundle savedInstanceState) {
 		logger.log("{billing} Installing listener");
 
+		_activity = activity;
+
 		_ctx.bindService(new 
 				Intent("com.android.vending.billing.InAppBillingService.BIND"),
 				mServiceConn, Context.BIND_AUTO_CREATE);
@@ -102,12 +111,13 @@ public class BillingPlugin implements IPlugin {
 
 	public void purchase(String jsonData) {
 		boolean success = false;
+		String sku = null;
 
 		try {
 			logger.log("{billing} Purchase");
 
 			JSONObject jsonObject = new JSONObject(jsonData);
-			String sku = jsonObject.get("sku");
+			sku = jsonObject.getString("sku");
 
 			// TODO: Add additional security with extra field ("1")
 
@@ -115,26 +125,25 @@ public class BillingPlugin implements IPlugin {
 					sku, "inapp", "1");
 
 			// If unable to create bundle,
-			int responseCode = ownedItems.getIntExtra("RESPONSE_CODE", 1);
-			if (responseCode != BILLING_RESPONSE_RESULT_OK) {
-				logger.error("{billing} Unable to create intent bundle for sku", sku);
+			if (buyIntentBundle == null || buyIntentBundle.getInt("RESPONSE_CODE", 1) != 0) {
+				logger.log("{billing} WARNING: Unable to create intent bundle for sku", sku);
 			} else {
 				PendingIntent pendingIntent = buyIntentBundle.getParcelable("BUY_INTENT");
 
 				if (pendingIntent == null) {
-					logger.error("{billing} Unable to create pending intent for sku", sku);
+					logger.log("{billing} WARNING: Unable to create pending intent for sku", sku);
 				} else {
-					startIntentSenderForResult(pendingIntent.getIntentSender(),
+					_activity.startIntentSenderForResult(pendingIntent.getIntentSender(),
 							BUY_REQUEST_CODE, new Intent(), Integer.valueOf(0),
 							Integer.valueOf(0), Integer.valueOf(0));
 					success = true;
 				}
 			}
 		} catch (Exception e) {
-			logger.error("{billing} Failure in purchase:", e);
+			logger.log("{billing} WARNING: Failure in purchase:", e);
 		}
 
-		if (!success) {
+		if (!success && sku != null) {
 			EventQueue.pushEvent(new PurchaseEvent(sku, "failed"));
 		}
 	}
@@ -148,9 +157,9 @@ public class BillingPlugin implements IPlugin {
 			Bundle ownedItems = mService.getPurchases(3, _ctx.getPackageName(), "inapp", null);
 
 			// If unable to create bundle,
-			int responseCode = ownedItems.getIntExtra("RESPONSE_CODE", 1);
+			int responseCode = ownedItems.getInt("RESPONSE_CODE", 1);
 			if (responseCode != 0) {
-				logger.error("{billing} Failure to create owned items bundle:", responseCode);
+				logger.log("{billing} WARNING: Failure to create owned items bundle:", responseCode);
 			} else {
 				ArrayList ownedSkus = 
 					ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
@@ -161,10 +170,10 @@ public class BillingPlugin implements IPlugin {
 				//String continuationToken = 
 				//	ownedItems.getString("INAPP_CONTINUATION_TOKEN");
 
-				for (int i = 0; i < purchaseDataList.size(); ++i) {
+				for (int i = 0; i < ownedSkus.size(); ++i) {
 					//String purchaseData = purchaseDataList.get(i);
 					//String signature = signatureList.get(i);
-					String sku = ownedSkus.get(i);
+					String sku = (String)ownedSkus.get(i);
 
 					// TODO: Provide purchase data
 					// TODO: Verify signatures
@@ -175,28 +184,28 @@ public class BillingPlugin implements IPlugin {
 				// TODO: Use continuationToken to retrieve > 700 items
 			}
 		} catch (Exception e) {
-			logger.error("{billing} Failure in getPurchases:", e);
+			logger.log("{billing} WARNING: Failure in getPurchases:", e);
 		}
 
 		EventQueue.pushEvent(new OwnedEvent(skus));
 	}
 
-	public void onActivityResult(Integer request, Integer result, Intent data) {
+	public void onActivityResult(Integer request, Integer resultCode, Intent data) {
 		if (request == BUY_REQUEST_CODE) {
 			String purchaseData = data.getStringExtra("INAPP_PURCHASE_DATA");
 			String sku = null;
 
 			if (purchaseData == null) {
-				logger.error("{billing} Ignored null purchase data");
+				logger.log("{billing} WARNING: Ignored null purchase data");
 			} else {
 				try {
 					JSONObject jo = new JSONObject(purchaseData);
 					sku = jo.getString("productId");
 
 					if (sku == null) {
-						logger.log("{billing} Failed to parse purchase data:", e);
+						logger.log("{billing} WARNING: Malformed purchase json");
 					} else {
-						switch (responseCode) {
+						switch (resultCode) {
 							case Activity.RESULT_OK:
 								logger.log("{billing} Successfully purchased SKU:", sku);
 								EventQueue.pushEvent(new PurchaseEvent(sku, null));
@@ -206,12 +215,12 @@ public class BillingPlugin implements IPlugin {
 								EventQueue.pushEvent(new PurchaseEvent(sku, "cancel"));
 								break;
 							default:
-								logger.error("{billing} Unexpected response code", responseCode);
+								logger.log("{billing} WARNING: Unexpected response code", resultCode);
 						}
 					}
 				}
 				catch (JSONException e) {
-					logger.log("{billing} Failed to parse purchase data:", e);
+					logger.log("{billing} WARNING: Failed to parse purchase data:", e);
 				}
 			}
 		}
