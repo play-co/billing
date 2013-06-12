@@ -26,7 +26,7 @@ import android.util.Log;
 import com.tealeaf.EventQueue;
 import com.tealeaf.event.*;
 
-import android.vending.billing.IInAppBillingService;
+import com.android.vending.billing.IInAppBillingService;
 
 public class BillingPlugin implements IPlugin {
 	Context _ctx;
