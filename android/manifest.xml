@@ -1,0 +1,7 @@
+<!--START_PLUGINS_MANIFEST-->
+	<!--Billing-->
+	<uses-permission android:name="com.android.vending.BILLING"/>
+<!--END_PLUGINS_MANIFEST-->
+<!--START_PLUGINS_APPLICATION-->
+<!--END_PLUGINS_APPLICATION-->
+

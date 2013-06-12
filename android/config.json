@@ -1,0 +1,12 @@
+{
+		"copyFiles": [
+			"BillingPlugin.java",
+			"IInAppBillingService.aidl"
+		],
+		"libraries": [
+		],
+		"jars": [
+		],
+		"injectionXML": "manifest.xml",
+		"injectionXSL": "manifest.xsl"
+}
