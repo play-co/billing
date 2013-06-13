@@ -105,6 +105,7 @@ Callback argument values:
 
 + null : Purchase success.
 + "not owned" : User has not purchased this item yet.
++ "already consuming" : A request to consume this item is already outstanding.
 + "failed" : Was not able to make consume request.
 + "cancel" : User canceled the consumption or item was unavailable.
 

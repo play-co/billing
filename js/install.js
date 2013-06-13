@@ -14,7 +14,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	var ownedSet = {};
 	var ownedArray = [];
 
-	var consuming = {};
 	var onConsume = {};
 	var tokenSet = {};
 
@@ -69,21 +68,12 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			ownedArray.splice(index, 1);
 		}
 
-		// If purchase callbacks are installed,
-		var calls = onConsume[token];
-		if (calls && calls.length > 0) {
-			// For each callback,
-			for (var ii = 0; ii < calls.length; ++ii) {
-				// Run it
-				calls[ii](evt.failure);
-			}
+		// Clear consume callback
+		var call = onConsume[token];
+		onConsume[token] = undefined;
 
-			// Clear callbacks
-			calls.length = 0;
-		}
-
-		// Disable consuming flag
-		consuming[sku] = undefined;
+		// Run consume callback
+		call(evt.failure);
 	});
 
 	NATIVE.events.registerHandler('billingOwned', function(evt) {
@@ -164,12 +154,11 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					next("not owned");
 				} else {
 					// If already waiting for a consume callback,
-					if (consuming[sku] == 1) {
-						onConsume[sku].push(next);
+					if (!onConsume[sku]) {
+						next("already consuming");
 					} else {
 						// We are now consuming it
-						consuming[sku] = 1;
-						onConsume[sku] = [next];
+						onConsume[sku] = next;
 
 						// Kick it off
 						var token = ownedSet[sku];
