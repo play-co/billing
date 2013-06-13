@@ -69,8 +69,8 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 
 		// Clear consume callback
-		var call = onConsume[token];
-		onConsume[token] = undefined;
+		var call = onConsume[sku];
+		onConsume[sku] = undefined;
 
 		// Run consume callback
 		call(evt.failure);
@@ -154,7 +154,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					next("not owned");
 				} else {
 					// If already waiting for a consume callback,
-					if (!onConsume[sku]) {
+					if (onConsume[sku]) {
 						next("already consuming");
 					} else {
 						// We are now consuming it

@@ -177,11 +177,11 @@ public class BillingPlugin implements IPlugin {
 						int response = mService.consumePurchase(3, _ctx.getPackageName(), TOKEN);
 
 						if (response != 0) {
-							logger.log("{billing} Consume suceeded:", TOKEN);
-							EventQueue.pushEvent(new ConsumeEvent(TOKEN, null));
-						} else {
 							logger.log("{billing} Consume failed:", TOKEN, "for reason:", response);
 							EventQueue.pushEvent(new ConsumeEvent(TOKEN, "cancel"));
+						} else {
+							logger.log("{billing} Consume suceeded:", TOKEN);
+							EventQueue.pushEvent(new ConsumeEvent(TOKEN, null));
 						}
 					} catch (Exception e) {
 						logger.log("{billing} WARNING: Failure in consume:", e);
