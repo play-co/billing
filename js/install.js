@@ -22,31 +22,53 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 		// NOTE: Function is organized carefully for callback reentrancy
 
+		// If SKU event,
 		var sku = evt.sku;
+		if (!sku) {
+			logger.log("Clearing all pending purchases on null SKU");
 
-		// If not failed,
-		if (!evt.failure) {
-			// Mark it owned
-			ownedSet[sku] = evt.token;
-			tokenSet[evt.token] = sku;
-			ownedArray.push(sku);
-		}
+			// Clear all pending purchases
+			for (var sku in ownedSet) {
+				// If purchase callbacks are installed,
+				var calls = onPurchase[sku];
+				if (calls && calls.length > 0) {
+					// For each callback,
+					for (var ii = 0; ii < calls.length; ++ii) {
+						// Run it
+						calls[ii]("cancel");
+					}
 
-		// If purchase callbacks are installed,
-		var calls = onPurchase[sku];
-		if (calls && calls.length > 0) {
-			// For each callback,
-			for (var ii = 0; ii < calls.length; ++ii) {
-				// Run it
-				calls[ii](evt.failure);
+					// Clear callbacks
+					calls.length = 0;
+				}
+
+				purchasing = {};
+			}
+		} else {
+			// If not failed,
+			if (!evt.failure) {
+				// Mark it owned
+				ownedSet[sku] = evt.token;
+				tokenSet[evt.token] = sku;
+				ownedArray.push(sku);
 			}
 
-			// Clear callbacks
-			calls.length = 0;
-		}
+			// If purchase callbacks are installed,
+			var calls = onPurchase[sku];
+			if (calls && calls.length > 0) {
+				// For each callback,
+				for (var ii = 0; ii < calls.length; ++ii) {
+					// Run it
+					calls[ii](evt.failure);
+				}
 
-		// Disable purchasing flag
-		purchasing[sku] = undefined;
+				// Clear callbacks
+				calls.length = 0;
+			}
+
+			// Disable purchasing flag
+			purchasing[sku] = undefined;
+		}
 	});
 
 	NATIVE.events.registerHandler('billingConsume', function(evt) {

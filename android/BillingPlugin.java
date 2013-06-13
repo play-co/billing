@@ -251,6 +251,7 @@ public class BillingPlugin implements IPlugin {
 
 			if (purchaseData == null) {
 				logger.log("{billing} WARNING: Ignored null purchase data");
+				EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
 			} else {
 				try {
 					JSONObject jo = new JSONObject(purchaseData);
@@ -277,6 +278,7 @@ public class BillingPlugin implements IPlugin {
 				}
 				catch (JSONException e) {
 					logger.log("{billing} WARNING: Failed to parse purchase data:", e);
+					EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
 				}
 			}
 		}
