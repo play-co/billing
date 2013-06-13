@@ -15,7 +15,7 @@ Include it in the `manifest.json` file under the "addons" section for your game:
 At the top of your `src/Application.js` install the JS wrapper:
 
 ~~~
-import plugins.billing.install as Billing;
+import plugins.billing.install;
 ~~~
 
 This installs a new global `billing` object accessible from all of your source
