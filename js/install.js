@@ -104,15 +104,15 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 	GLOBAL.billing = {
 		isPurchased: function(sku, next) {
-			if (typeof(next) == "function") {
+			if (typeof next == "function") {
 				// If already got owned list,
 				if (gotOwned) {
 					// Complete immediately
-					next(ownedSet[sku] == 1);
+					next(ownedSet[sku]);
 				} else {
 					// Add to callback list
 					onOwned.push(function() {
-						next(ownedSet[sku] == 1);
+						next(ownedSet[sku]);
 					});
 				}
 			}
