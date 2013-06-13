@@ -72,6 +72,15 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	public class ConnectedEvent extends com.tealeaf.event.Event {
+		boolean connected;
+
+		public OwnedEvent(boolean connected) {
+			super("billingConnected");
+			this.connected = connected;
+		}
+	}
+
 	public BillingPlugin() {
 	}
 
@@ -82,12 +91,14 @@ public class BillingPlugin implements IPlugin {
 			@Override
 				public void onServiceDisconnected(ComponentName name) {
 					mService = null;
+					EventQueue.pushEvent(new ConnectEvent(false));
 				}
 
 			@Override
 				public void onServiceConnected(ComponentName name, 
 						IBinder service) {
 					mService = IInAppBillingService.Stub.asInterface(service);
+					EventQueue.pushEvent(new ConnectEvent(true));
 				}
 		};
 	}
@@ -128,6 +139,11 @@ public class BillingPlugin implements IPlugin {
 			JSONObject jsonObject = new JSONObject(jsonData);
 			sku = jsonObject.getString("sku");
 
+			if (mService == null) {
+				EventQueue.pushEvent(new PurchaseEvent(sku, null, "disconnected"));
+				return;
+			}
+
 			logger.log("{billing} Purchasing:", sku);
 
 			// TODO: Add additional security with extra field ("1")
@@ -152,6 +168,7 @@ public class BillingPlugin implements IPlugin {
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in purchase:", e);
+			e.printStackTrace();
 		}
 
 		if (!success && sku != null) {
@@ -185,12 +202,14 @@ public class BillingPlugin implements IPlugin {
 						}
 					} catch (Exception e) {
 						logger.log("{billing} WARNING: Failure in consume:", e);
+						e.printStackTrace();
 						EventQueue.pushEvent(new ConsumeEvent(TOKEN, "failed"));
 					}
 				}
 			}.start();
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in consume:", e);
+			e.printStackTrace();
 			EventQueue.pushEvent(new ConsumeEvent(token, "failed"));
 		}
 	}
@@ -239,6 +258,7 @@ public class BillingPlugin implements IPlugin {
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
+			e.printStackTrace();
 		}
 
 		EventQueue.pushEvent(new OwnedEvent(skus, tokens));
@@ -278,6 +298,7 @@ public class BillingPlugin implements IPlugin {
 				}
 				catch (JSONException e) {
 					logger.log("{billing} WARNING: Failed to parse purchase data:", e);
+					e.printStackTrace();
 					EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
 				}
 			}
