@@ -38,9 +38,12 @@ Initiate the purchase of an item by its SKU.
 The purchase may fail if the user clicks to deny the purchase, or if the user
 has already purchased the item.
 
+Callback argument values:
+
++ null : Purchase success.
 + "already owned" : User has already purchased the item.
 + "failed" : Was not able to make purchase request.
-+ "cancel" : User canceled the purchase.
++ "cancel" : User canceled the purchase or item was unavailable.
 
 ~~~
 billing.purchase("android.test.purchased", function(fail) {
@@ -84,4 +87,24 @@ Returns
 :    1. `void`
 
 Checks if an item is already purchased or not by referencing its SKU string.
+
+### billing.consume (sku, next)
+
+Parameters
+:    1. `sku {string}` ---The product SKU.
+     2. `callback {function}` ---The callback function.  First argument will be
+null if the consumption completed successfully, otherwise it will be a string
+that explains why it could not be consumed.
+
+Returns
+:    1. `void`
+
+Consumes a previously purchased item.
+
+Callback argument values:
+
++ null : Purchase success.
++ "not owned" : User has not purchased this item yet.
++ "failed" : Was not able to make consume request.
++ "cancel" : User canceled the consumption or item was unavailable.
 

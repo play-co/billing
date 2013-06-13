@@ -14,8 +14,12 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	var ownedSet = {};
 	var ownedArray = [];
 
+	var consuming = {};
+	var onConsume = {};
+	var tokenSet = {};
+
 	NATIVE.events.registerHandler('billingPurchase', function(evt) {
-		logger.log("Got billingPurchase event");
+		logger.log("Got billingPurchase event:", JSON.stringify(evt));
 
 		// NOTE: Function is organized carefully for callback reentrancy
 
@@ -24,7 +28,8 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		// If not failed,
 		if (!evt.failure) {
 			// Mark it owned
-			ownedSet[sku] = 1;
+			ownedSet[sku] = evt.token;
+			tokenSet[evt.token] = sku;
 			ownedArray.push(sku);
 		}
 
@@ -42,19 +47,58 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 
 		// Disable purchasing flag
-		purchasing[sku] = 0;
+		purchasing[sku] = undefined;
+	});
+
+	NATIVE.events.registerHandler('billingConsume', function(evt) {
+		logger.log("Got billingConsume event:", JSON.stringify(evt));
+
+		// NOTE: Function is organized carefully for callback reentrancy
+
+		var token = evt.token;
+		var sku = tokenSet[token];
+
+		// If not failed,
+		if (!evt.failure) {
+			// Remove from lists
+			ownedSet[sku] = undefined;
+			tokenSet[token] = undefined;
+
+			// Remove from ownedArray
+			var index = ownedArray.indexOf(sku);
+			ownedArray.splice(index, 1);
+		}
+
+		// If purchase callbacks are installed,
+		var calls = onConsume[token];
+		if (calls && calls.length > 0) {
+			// For each callback,
+			for (var ii = 0; ii < calls.length; ++ii) {
+				// Run it
+				calls[ii](evt.failure);
+			}
+
+			// Clear callbacks
+			calls.length = 0;
+		}
+
+		// Disable consuming flag
+		consuming[sku] = undefined;
 	});
 
 	NATIVE.events.registerHandler('billingOwned', function(evt) {
-		logger.log("Got billingOwned event");
+		logger.log("Got billingOwned event:", JSON.stringify(evt));
 
 		// Add owned items
 		var skus = evt.skus;
+		var tokens = evt.tokens;
 		if (skus && skus.length > 0) {
 			for (var ii = 0, len = skus.length; ii < len; ++ii) {
 				var sku = skus[ii];
+				var token = tokens[ii];
 
-				ownedSet[sku] = 1;
+				ownedSet[sku] = token;
+				tokenSet[token] = sku;
 				ownedArray.push(sku);
 			}
 		}
@@ -84,26 +128,22 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			}
 		},
 		purchase: function(sku, next) {
+			if (typeof next != "function") {
+				logger.debug("WARNING: billing.purchase invoked without a callback");
+				next = function() {};
+			}
+
 			billing.isPurchased(sku, function(owned) {
 				if (owned) {
 					next("already owned");
 				} else {
 					// If already waiting for a purchase callback,
 					if (purchasing[sku] == 1) {
-						if (typeof(next) == "function") {
-							if (onPurchase[sku]) {
-								onPurchase[sku].push(next);
-							} else {
-								onPurchase[sku] = [next];
-							}
-						}
+						onPurchase[sku].push(next);
 					} else {
 						// We are now purchasing it
 						purchasing[sku] = 1;
-
-						if (typeof(next) == "function") {
-							onPurchase[sku] = [next];
-						}
+						onPurchase[sku] = [next];
 
 						// Kick it off
 						NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
@@ -113,7 +153,39 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 				}
 			});
 		},
+		consume: function(sku, next) {
+			if (typeof next != "function") {
+				logger.debug("WARNING: billing.consume invoked without a callback");
+				next = function() {};
+			}
+
+			billing.isPurchased(sku, function(owned) {
+				if (!owned) {
+					next("not owned");
+				} else {
+					// If already waiting for a consume callback,
+					if (consuming[sku] == 1) {
+						onConsume[sku].push(next);
+					} else {
+						// We are now consuming it
+						consuming[sku] = 1;
+						onConsume[sku] = [next];
+
+						// Kick it off
+						var token = ownedSet[sku];
+						NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
+							"token": token
+						}));
+					}
+				}
+			});
+		},
 		getPurchases: function(next) {
+			if (typeof next != "function") {
+				logger.debug("WARNING: billing.getPurchases invoked without a callback");
+				next = function() {};
+			}
+
 			// If already got owned list,
 			if (gotOwned) {
 				// Complete immediately

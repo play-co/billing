@@ -42,22 +42,33 @@ public class BillingPlugin implements IPlugin {
 	static private final int BUY_REQUEST_CODE = 123450;
 
 	public class PurchaseEvent extends com.tealeaf.event.Event {
-		String sku;
-		String reason;
+		String sku, token, failure;
 
-		public PurchaseEvent(String sku, String reason) {
+		public PurchaseEvent(String sku, String token, String failure) {
 			super("billingPurchase");
 			this.sku = sku;
-			this.reason = reason;
+			this.token = token;
+			this.failure = failure;
+		}
+	}
+
+	public class ConsumeEvent extends com.tealeaf.event.Event {
+		String token, failure;
+
+		public ConsumeEvent(String token, String failure) {
+			super("billingConsume");
+			this.token = token;
+			this.failure = failure;
 		}
 	}
 
 	public class OwnedEvent extends com.tealeaf.event.Event {
-		ArrayList<String> skus;
+		ArrayList<String> skus, tokens;
 
-		public OwnedEvent(ArrayList<String> skus) {
+		public OwnedEvent(ArrayList<String> skus, ArrayList<String> tokens) {
 			super("billingOwned");
 			this.skus = skus;
+			this.tokens = tokens;
 		}
 	}
 
@@ -114,10 +125,10 @@ public class BillingPlugin implements IPlugin {
 		String sku = null;
 
 		try {
-			logger.log("{billing} Purchase");
-
 			JSONObject jsonObject = new JSONObject(jsonData);
 			sku = jsonObject.getString("sku");
+
+			logger.log("{billing} Purchasing:", sku);
 
 			// TODO: Add additional security with extra field ("1")
 
@@ -144,12 +155,49 @@ public class BillingPlugin implements IPlugin {
 		}
 
 		if (!success && sku != null) {
-			EventQueue.pushEvent(new PurchaseEvent(sku, "failed"));
+			EventQueue.pushEvent(new PurchaseEvent(sku, null, "failed"));
+		}
+	}
+
+	public void consume(String jsonData) {
+		String token = null;
+
+		try {
+			JSONObject jsonObject = new JSONObject(jsonData);
+			final String TOKEN = jsonObject.getString("token");
+			token = TOKEN;
+
+			logger.log("{billing} Consuming:", TOKEN);
+
+			new Thread() {
+				public void run() {
+					try {
+						logger.log("{billing} Consuming from thread:", TOKEN);
+
+						int response = mService.consumePurchase(3, _ctx.getPackageName(), TOKEN);
+
+						if (response != 0) {
+							logger.log("{billing} Consume suceeded:", TOKEN);
+							EventQueue.pushEvent(new ConsumeEvent(TOKEN, null));
+						} else {
+							logger.log("{billing} Consume failed:", TOKEN, "for reason:", response);
+							EventQueue.pushEvent(new ConsumeEvent(TOKEN, "cancel"));
+						}
+					} catch (Exception e) {
+						logger.log("{billing} WARNING: Failure in consume:", e);
+						EventQueue.pushEvent(new ConsumeEvent(TOKEN, "failed"));
+					}
+				}
+			}.start();
+		} catch (Exception e) {
+			logger.log("{billing} WARNING: Failure in consume:", e);
+			EventQueue.pushEvent(new ConsumeEvent(token, "failed"));
 		}
 	}
 
 	public void getPurchases(String jsonData) {
 		ArrayList<String> skus = new ArrayList<String>();
+		ArrayList<String> tokens = new ArrayList<String>();
 
 		try {
 			logger.log("{billing} Getting prior purchases");
@@ -163,22 +211,28 @@ public class BillingPlugin implements IPlugin {
 			} else {
 				ArrayList ownedSkus = 
 					ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
-				//ArrayList purchaseDataList = 
-				//	ownedItems.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
+				ArrayList purchaseDataList = 
+					ownedItems.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
 				//ArrayList signatureList = 
 				//	ownedItems.getStringArrayList("INAPP_DATA_SIGNATURE");
 				//String continuationToken = 
 				//	ownedItems.getString("INAPP_CONTINUATION_TOKEN");
 
 				for (int i = 0; i < ownedSkus.size(); ++i) {
-					//String purchaseData = purchaseDataList.get(i);
 					//String signature = signatureList.get(i);
 					String sku = (String)ownedSkus.get(i);
+					String purchaseData = (String)purchaseDataList.get(i);
+
+					JSONObject json = new JSONObject(purchaseData);
+					String token = json.getString("purchaseToken");
 
 					// TODO: Provide purchase data
 					// TODO: Verify signatures
 
-					skus.add(sku);
+					if (sku != null && token != null) {
+						skus.add(sku);
+						tokens.add(token);
+					}
 				} 
 
 				// TODO: Use continuationToken to retrieve > 700 items
@@ -187,7 +241,7 @@ public class BillingPlugin implements IPlugin {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
 		}
 
-		EventQueue.pushEvent(new OwnedEvent(skus));
+		EventQueue.pushEvent(new OwnedEvent(skus, tokens));
 	}
 
 	public void onActivityResult(Integer request, Integer resultCode, Intent data) {
@@ -207,12 +261,14 @@ public class BillingPlugin implements IPlugin {
 					} else {
 						switch (resultCode) {
 							case Activity.RESULT_OK:
+								String token = jo.getString("purchaseToken");
+
 								logger.log("{billing} Successfully purchased SKU:", sku);
-								EventQueue.pushEvent(new PurchaseEvent(sku, null));
+								EventQueue.pushEvent(new PurchaseEvent(sku, token, null));
 								break;
 							case Activity.RESULT_CANCELED:
 								logger.log("{billing} Purchase canceled for SKU:", sku);
-								EventQueue.pushEvent(new PurchaseEvent(sku, "cancel"));
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, "cancel"));
 								break;
 							default:
 								logger.log("{billing} WARNING: Unexpected response code", resultCode);
