@@ -1,8 +1,10 @@
+import device;
+
 // If on true native mobile platform,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
-	logger.log("{billing} Installing fake billing API");
+	logger.log("Installing fake billing API");
 } else {
-	logger.log("{billing} Installing JS billing component for native");
+	logger.log("Installing JS billing component for native");
 
 	var purchasing = {};
 	var onPurchase = {};
@@ -13,16 +15,21 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	var ownedArray = [];
 
 	NATIVE.events.registerHandler('billingPurchase', function(evt) {
+		logger.log("Got billingPurchase event");
+
 		// NOTE: Function is organized carefully for callback reentrancy
+
+		var sku = evt.sku;
 
 		// If not failed,
 		if (!evt.failure) {
 			// Mark it owned
-			owned[evt.sku] = 1;
+			ownedSet[sku] = 1;
+			ownedArray.push(sku);
 		}
 
 		// If purchase callbacks are installed,
-		var calls = onPurchase[evt.sku];
+		var calls = onPurchase[sku];
 		if (calls && calls.length > 0) {
 			// For each callback,
 			for (var ii = 0; ii < calls.length; ++ii) {
@@ -35,10 +42,12 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 
 		// Disable purchasing flag
-		purchasing[evt.sku] = 0;
+		purchasing[sku] = 0;
 	});
 
 	NATIVE.events.registerHandler('billingOwned', function(evt) {
+		logger.log("Got billingOwned event");
+
 		// Add owned items
 		var skus = evt.skus;
 		if (skus && skus.length > 0) {
@@ -75,28 +84,34 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			}
 		},
 		purchase: function(sku, next) {
-			// If already waiting for a purchase callback,
-			if (purchasing[sku] == 1) {
-				if (typeof(next) == "function") {
-					if (onPurchase[sku]) {
-						onPurchase[sku].push(next);
+			billing.isPurchased(sku, function(owned) {
+				if (owned) {
+					next("already owned");
+				} else {
+					// If already waiting for a purchase callback,
+					if (purchasing[sku] == 1) {
+						if (typeof(next) == "function") {
+							if (onPurchase[sku]) {
+								onPurchase[sku].push(next);
+							} else {
+								onPurchase[sku] = [next];
+							}
+						}
 					} else {
-						onPurchase[sku] = [next];
+						// We are now purchasing it
+						purchasing[sku] = 1;
+
+						if (typeof(next) == "function") {
+							onPurchase[sku] = [next];
+						}
+
+						// Kick it off
+						NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+							"sku": sku
+						}));
 					}
 				}
-			} else {
-				// We are now purchasing it
-				purchasing[sku] = 1;
-
-				if (typeof(next) == "function") {
-					onPurchase[sku] = [next];
-				}
-
-				// Kick it off
-				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
-					"sku": sku
-				}));
-			}
+			});
 		},
 		getPurchases: function(next) {
 			// If already got owned list,
@@ -112,6 +127,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	}
 
-	NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}"));
+	NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 }
 
