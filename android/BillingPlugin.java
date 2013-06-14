@@ -152,6 +152,7 @@ public class BillingPlugin implements IPlugin {
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in purchase:", e);
+			e.printStackTrace();
 		}
 
 		if (!success && sku != null) {
@@ -185,12 +186,14 @@ public class BillingPlugin implements IPlugin {
 						}
 					} catch (Exception e) {
 						logger.log("{billing} WARNING: Failure in consume:", e);
+						e.printStackTrace();
 						EventQueue.pushEvent(new ConsumeEvent(TOKEN, "failed"));
 					}
 				}
 			}.start();
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in consume:", e);
+			e.printStackTrace();
 			EventQueue.pushEvent(new ConsumeEvent(token, "failed"));
 		}
 	}
@@ -239,6 +242,7 @@ public class BillingPlugin implements IPlugin {
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
+			e.printStackTrace();
 		}
 
 		EventQueue.pushEvent(new OwnedEvent(skus, tokens));
@@ -273,11 +277,13 @@ public class BillingPlugin implements IPlugin {
 								break;
 							default:
 								logger.log("{billing} WARNING: Unexpected response code", resultCode);
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, "failed"));
 						}
 					}
 				}
 				catch (JSONException e) {
 					logger.log("{billing} WARNING: Failed to parse purchase data:", e);
+					e.printStackTrace();
 					EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
 				}
 			}
