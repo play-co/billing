@@ -1,6 +1,11 @@
 {
 	"code": [
+		"PaymentObserver.h",
+		"PaymentObserver.mm",
+		"Purchases.h",
+		"Purchases.mm"
 	],
 	"frameworks": [
+		"StoreKit"
 	]
 }
