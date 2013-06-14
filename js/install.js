@@ -124,25 +124,15 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		onOwned.length = 0;
 	});
 
-	GLOBAL.billing = {
-		isPurchased: function(sku, next) {
-			if (typeof next == "function") {
-				// If already got owned list,
-				if (gotOwned) {
-					// Complete immediately
-					next(ownedSet[sku]);
-				} else {
-					// Add to callback list
-					onOwned.push(function() {
-						next(ownedSet[sku]);
-					});
-				}
-			}
-		},
-		purchase: function(sku, next) {
+	var Billing = Class(Emitter, function (supr) {
+		this.init = function() {
+			supr(this, 'init', arguments);
+		};
+
+		this.purchase = function(sku, next) {
 			if (typeof next != "function") {
-				logger.debug("WARNING: billing.purchase invoked without a callback");
-				next = function() {};
+				logger.debug("WARNING: billing.purchase ignored without a callback");
+				return;
 			}
 
 			billing.isPurchased(sku, function(owned) {
@@ -164,37 +154,12 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					}
 				}
 			});
-		},
-		consume: function(sku, next) {
-			if (typeof next != "function") {
-				logger.debug("WARNING: billing.consume invoked without a callback");
-				next = function() {};
-			}
+		};
 
-			billing.isPurchased(sku, function(owned) {
-				if (!owned) {
-					next("not owned");
-				} else {
-					// If already waiting for a consume callback,
-					if (onConsume[sku]) {
-						next("already consuming");
-					} else {
-						// We are now consuming it
-						onConsume[sku] = next;
-
-						// Kick it off
-						var token = ownedSet[sku];
-						NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
-							"token": token
-						}));
-					}
-				}
-			});
-		},
-		getPurchases: function(next) {
+		this.handleOldPurchases = function(next) {
 			if (typeof next != "function") {
-				logger.debug("WARNING: billing.getPurchases invoked without a callback");
-				next = function() {};
+				logger.debug("WARNING: billing.handleOldPurchases ignored without a callback");
+				return;
 			}
 
 			// If already got owned list,
@@ -207,8 +172,36 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					onOwned.push(next);
 				}
 			}
-		}
+		};
+	});
+
+	GLOBAL.billing = new Billing;
+
+		isPurchased: function(sku, next) {
+			if (typeof next == "function") {
+				// If already got owned list,
+				if (gotOwned) {
+					// Complete immediately
+					next(ownedSet[sku]);
+				} else {
+					// Add to callback list
+					onOwned.push(function() {
+						next(ownedSet[sku]);
+					});
+				}
+			}
+		},
 	}
+
+	var isConnected = false;
+
+	NATIVE.events.registerHandler('billingConnected', function(evt) {
+		logger.log("Got billingConnected event:", JSON.stringify(evt));
+
+		if (isConnected != evt.connected) {
+			GLOBAL.billing.emit("MarketAvailable", isConnected);
+		}
+	});
 
 	NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 }

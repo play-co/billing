@@ -35,10 +35,10 @@ import com.tealeaf.event.*;
 import com.android.vending.billing.IInAppBillingService;
 
 public class BillingPlugin implements IPlugin {
-	Context _ctx;
-	Activity _activity;
-	IInAppBillingService mService;
-	ServiceConnection mServiceConn;
+	Context _ctx = null;
+	Activity _activity = null;
+	IInAppBillingService mService = null;
+	ServiceConnection mServiceConn = null;
 	static private final int BUY_REQUEST_CODE = 123450;
 
 	public class PurchaseEvent extends com.tealeaf.event.Event {
@@ -90,14 +90,20 @@ public class BillingPlugin implements IPlugin {
 		mServiceConn = new ServiceConnection() {
 			@Override
 				public void onServiceDisconnected(ComponentName name) {
-					mService = null;
+					synchronized (mService) {
+						mService = null;
+					}
+
 					EventQueue.pushEvent(new ConnectEvent(false));
 				}
 
 			@Override
 				public void onServiceConnected(ComponentName name, 
 						IBinder service) {
-					mService = IInAppBillingService.Stub.asInterface(service);
+					synchronized (mService) {
+						mService = IInAppBillingService.Stub.asInterface(service);
+					}
+
 					EventQueue.pushEvent(new ConnectEvent(true));
 				}
 		};
@@ -139,17 +145,19 @@ public class BillingPlugin implements IPlugin {
 			JSONObject jsonObject = new JSONObject(jsonData);
 			sku = jsonObject.getString("sku");
 
-			if (mService == null) {
-				EventQueue.pushEvent(new PurchaseEvent(sku, null, "disconnected"));
-				return;
-			}
-
 			logger.log("{billing} Purchasing:", sku);
 
-			// TODO: Add additional security with extra field ("1")
+			synchronized (mService) {
+				if (mService == null) {
+					EventQueue.pushEvent(new PurchaseEvent(sku, null, "service"));
+					return;
+				}
 
-			Bundle buyIntentBundle = mService.getBuyIntent(3, _ctx.getPackageName(),
-					sku, "inapp", "1");
+				// TODO: Add additional security with extra field ("1")
+
+				Bundle buyIntentBundle = mService.getBuyIntent(3, _ctx.getPackageName(),
+						sku, "inapp", "1");
+			}
 
 			// If unable to create bundle,
 			if (buyIntentBundle == null || buyIntentBundle.getInt("RESPONSE_CODE", 1) != 0) {
@@ -184,6 +192,11 @@ public class BillingPlugin implements IPlugin {
 			final String TOKEN = jsonObject.getString("token");
 			token = TOKEN;
 
+			if (mService == null) {
+				EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
+				return;
+			}
+
 			logger.log("{billing} Consuming:", TOKEN);
 
 			new Thread() {
@@ -191,7 +204,16 @@ public class BillingPlugin implements IPlugin {
 					try {
 						logger.log("{billing} Consuming from thread:", TOKEN);
 
-						int response = mService.consumePurchase(3, _ctx.getPackageName(), TOKEN);
+						int response = 1;
+
+						synchronized (mService) {
+							if (mService == null) {
+								EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
+								return;
+							}
+
+							response = mService.consumePurchase(3, _ctx.getPackageName(), TOKEN);
+						}
 
 						if (response != 0) {
 							logger.log("{billing} Consume failed:", TOKEN, "for reason:", response);
@@ -221,7 +243,16 @@ public class BillingPlugin implements IPlugin {
 		try {
 			logger.log("{billing} Getting prior purchases");
 
-			Bundle ownedItems = mService.getPurchases(3, _ctx.getPackageName(), "inapp", null);
+			Bundle ownedItems = null;
+
+			synchronized (mService) {
+				if (mService == null) {
+					EventQueue.pushEvent(new PurchaseEvent(sku, null, "service"));
+					return;
+				}
+
+				ownedItems = mService.getPurchases(3, _ctx.getPackageName(), "inapp", null);
+			}
 
 			// If unable to create bundle,
 			int responseCode = ownedItems.getInt("RESPONSE_CODE", 1);
@@ -292,7 +323,8 @@ public class BillingPlugin implements IPlugin {
 								EventQueue.pushEvent(new PurchaseEvent(sku, null, "cancel"));
 								break;
 							default:
-								logger.log("{billing} WARNING: Unexpected response code", resultCode);
+								logger.log("{billing} WARNING: Unexpected response code:", resultCode, "for", sku);
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, "failed"));
 						}
 					}
 				}
