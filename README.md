@@ -22,13 +22,10 @@ This installs a new global `billing` object accessible to all of your source.
 
 ## Checking for Market Availability
 
-Billing supports in-app purchases on the Google Play Store on Android, and on
+Billing supports in-app purchases from the Google Play Store on Android, and from
 the Apple App Store on iOS.
 
-Purchases can fail due to network failures or market unavailability.  You can
-check if the market is available by checking `billing.isMarketAvailable` before
-displaying the in-app store.  You can also subscribe to a "MarketAvailable"
-event (see event documentation below).
+Purchases can fail to go through due to network failures or market unavailability.  You can verify that the market is available by checking `billing.isMarketAvailable` before displaying your in-app store.  You can also subscribe to a "MarketAvailable" event (see event documentation below).
 
 ~~~
 // In response to player clicking store button:
@@ -43,7 +40,7 @@ if (!billing.isMarketAvailable) {
 To simplify the API, all purchases are handled as consumables.  For this reason,
 it is up to you to make sure that players do not purchase ie. character unlocks
 two times as the billing plugin cannot differentiate those types of one-time
-upgrade -style purchases from currency -style purchases.
+upgrade -style purchases from consumable currency -style purchases.
 
 ~~~
 // Initialize the coin counter
@@ -77,8 +74,8 @@ On startup, after loading the coin counts and other credits from local storage,
 you should query the list of outstanding purchases.  These items were bought
 before the game closed and still need to be credited in-game.
 
-Handling this properly will prevent problems where your players bought an item
-but never got credited for it in the game.
+Handling this properly will avoid problems where your players bought an item
+but never got credited for it.
 
 ~~~
 // After reading the coinCount on startup:
@@ -100,6 +97,8 @@ billing.handleOldPurchases(function(items) {
 	}
 });
 ~~~
+
+This callback may complete at any time when the market becomes available, even during gameplay.
 
 # Global Object: billing
 
