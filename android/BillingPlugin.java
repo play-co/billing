@@ -64,11 +64,13 @@ public class BillingPlugin implements IPlugin {
 
 	public class OwnedEvent extends com.tealeaf.event.Event {
 		ArrayList<String> skus, tokens;
+		String failure;
 
-		public OwnedEvent(ArrayList<String> skus, ArrayList<String> tokens) {
+		public OwnedEvent(ArrayList<String> skus, ArrayList<String> tokens, String failure) {
 			super("billingOwned");
 			this.skus = skus;
 			this.tokens = tokens;
+			this.failure = failure;
 		}
 	}
 
@@ -239,6 +241,7 @@ public class BillingPlugin implements IPlugin {
 	public void getPurchases(String jsonData) {
 		ArrayList<String> skus = new ArrayList<String>();
 		ArrayList<String> tokens = new ArrayList<String>();
+		boolean success = false;
 
 		try {
 			logger.log("{billing} Getting prior purchases");
@@ -247,7 +250,7 @@ public class BillingPlugin implements IPlugin {
 
 			synchronized (mService) {
 				if (mService == null) {
-					EventQueue.pushEvent(new PurchaseEvent(sku, null, "service"));
+					EventQueue.pushEvent(new OwnedEvent(null, null, "service"));
 					return;
 				}
 
@@ -258,6 +261,7 @@ public class BillingPlugin implements IPlugin {
 			int responseCode = ownedItems.getInt("RESPONSE_CODE", 1);
 			if (responseCode != 0) {
 				logger.log("{billing} WARNING: Failure to create owned items bundle:", responseCode);
+				EventQueue.pushEvent(new OwnedEvent(null, null, "failed"));
 			} else {
 				ArrayList ownedSkus = 
 					ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
@@ -286,13 +290,14 @@ public class BillingPlugin implements IPlugin {
 				} 
 
 				// TODO: Use continuationToken to retrieve > 700 items
+
+				EventQueue.pushEvent(new OwnedEvent(skus, tokens, null));
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
 			e.printStackTrace();
+			EventQueue.pushEvent(new OwnedEvent(null, null, "failed"));
 		}
-
-		EventQueue.pushEvent(new OwnedEvent(skus, tokens));
 	}
 
 	public void onActivityResult(Integer request, Integer resultCode, Intent data) {

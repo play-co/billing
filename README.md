@@ -1,5 +1,7 @@
 # Game Closure DevKit Plugin: Billing
 
+The billing plugin supports in-app purchases from the Google Play Store on Android, and from the Apple App Store on iOS, through one simple unified API.
+
 ## Installation
 
 Install the billing plugin by running `basil install billing`.
@@ -20,85 +22,104 @@ import plugins.billing.install;
 
 This installs a new global `billing` object accessible to all of your source.
 
-## Checking for Market Availability
+## Handling Purchases
 
-Billing supports in-app purchases from the Google Play Store on Android, and from
-the Apple App Store on iOS.
+In the JavaScript code for your game, you should write some code to handle in-app purchases.  After reading the previous state of the purchasable items from `localStorage`, your code should set up a `billing.onPurchase` handler:
+
+~~~
+// Initialize the coin counter
+var coinCount = localStorage.getItem("coinCount") || 0;
+
+var purchaseHandlers = {
+	"fiveCoins": function() {
+		// Update the visual coin counter here.
+		coinCount += 5;
+		localStorage.setItem("coinCount", coinCount);
+		// Pop-up award modal here.
+	}
+};
+
+function handlePurchase(item) {
+	var handler = purchaseHandlers[item];
+	if (typeof handler === "function") {
+		handler();
+	}
+};
+
+billing.onPurchase = handlePurchase;
+~~~
+
+The callback you set for `billing.onPurchase` is only called on successful purchases.  It will be called once for each purchase that should be credited to the player.  Purchases will be queued up until the callback is set, and then they will all be delivered, one at a time.
+
+After a player successfully purchases an item, it is a good idea to store it in
+offline local storage to persist between runs of the game.  This can be done
+with the normal HTML5 localStorage API as shown above.
+
+## Handling Purchase Failures
+
+When purchases fail, the failure may be handled with the `billing.onPurchaseFail` callback:
+
+~~~
+function handleFailure(reason, item) {
+	if (reason !== "cancel") {
+		// Market is unavailable - User should turn off Airplane mode or find reception.
+	}
+
+	// Else: Item purchase canceled - No need to present a dialog in response.
+}
+
+billing.onFailure = handleFailure;
+~~~
+
+Handling these failures is *optional*.
+
+One way to respond is to pop up a modal dialog that says "please check that Airplane mode is disabled and try again later."  It may also be interesting to do some analytics on how often users cancel purchases or fail to make purchases.
+
+## Checking for Market Availability
 
 Purchases can fail to go through due to network failures or market unavailability.  You can verify that the market is available by checking `billing.isMarketAvailable` before displaying your in-app store.  You can also subscribe to a "MarketAvailable" event (see event documentation below).
 
 ~~~
-// In response to player clicking store button:
+// In response to player clicking In-App Store button:
 
 if (!billing.isMarketAvailable) {
 	// Market is unavailable - User should turn off Airplane mode or find reception.
 }
 ~~~
 
-## Making Purchases
+Checking for availability is entirely optional.
 
-To simplify the API, all purchases are handled as consumables.  For this reason,
-it is up to you to make sure that players do not purchase ie. character unlocks
-two times as the billing plugin cannot differentiate those types of one-time
-upgrade -style purchases from consumable currency -style purchases.
+## Requesting Purchases
+
+All purchases are handled as consumables.  For this reason, it is up to you to make sure that players do not purchase ie. character unlocks two times as the billing plugin cannot differentiate those types of one-time upgrade -style purchases from consumable currency -style purchases.
+
+When you request a purchase, a system modal will pop up that the user will interact with and may cancel.  Purchases may also fail for other reasons such as network outages.
+
+Kicking off a new purchase is done with the `billing.purchase` function:
 
 ~~~
-// Initialize the coin counter
-var coinCount = localStorage.getItem("coinCount") || 0;
-
 // In response to player clicking the "5 coin purchase" button:
 
-billing.purchase("fiveCoins", function(fail) {
-	if (!fail) {
-		// Update the visual coin counter here.
-		coinCount += 5;
-		localStorage.setItem("coinCount", coinCount);
-
-	} else if (fail === "service") {
-		// Market is unavailable - User should turn off Airplane mode or find reception.
-
-	} else if (fail !== "cancel") {
-		// Item purchase failed for some other reason, maybe a network failure.
-	}
-	// Else: Item purchase canceled - No need to present a dialog in response.
-});
+billing.purchase("fiveCoins");
 ~~~
 
-After a player successfully purchases an item, it is a good idea to store it in
-offline local storage to persist between runs of the game.  This can be done
-with the normal HTML5 localStorage API as shown above.
+## Disabling Purchases
 
-## Handling Prior Purchases
-
-On startup, after loading the coin counts and other credits from local storage,
-you should query the list of outstanding purchases.  These items were bought
-before the game closed and still need to be credited in-game.
-
-Handling this properly will avoid problems where your players bought an item
-but never got credited for it.
+The purchase callback may happen at any time, even during gameplay.  So it is a good idea to disable the callback when it is inopportune by setting it to null.  When you want to receive the callback events, just set it back to the handler and any queued events will be delivered as shown in this example code:
 
 ~~~
-// After reading the coinCount on startup:
+// When player enters game and should not be disturbed by purchase callbacks:
+function DisablePurchaseEvents() {
+	billing.onPurchase = null;
+	billing.onFailure = null;
+}
 
-billing.handleOldPurchases(function(items) {
-	var handlers = {
-		"fiveCoins": function() {
-			// Update the visual coin counter here.
-			coinCount += 5;
-			localStorage.setItem("coinCount", coinCount);
-		}
-	};
-
-	for (var ii = 0; ii < items; ++ii) {
-		var item = items[ii];
-		if (typeof handlers[item] === "function") {
-			handlers[item]();
-		}
-	}
-});
+// And when they return to the menu system:
+function EnablePurchaseEvents() {
+	billing.onPurchase = handlePurchase; // see definitions in examples above
+	billing.onFailure = handleFailure;
+}
 ~~~
-
-This callback may complete at any time when the market becomes available, even during gameplay.
 
 # Global Object: billing
 
@@ -106,7 +127,7 @@ This callback may complete at any time when the market becomes available, even d
 
 ### "MarketAvailable"
 
-This event fires whenever market availability changes.
+This event fires whenever market availability changes.  It is safe to ignore these events.
 
 ~~~
 billing.on('MarketAvailable', function (available) {
@@ -119,7 +140,7 @@ billing.on('MarketAvailable', function (available) {
 Read the [event system documentation](http://docs.gameclosure.com/api/event.html)
 for other ways to handle these events.
 
-## Members
+## Members:
 
 ### billing.isMarketAvailable
 
@@ -127,6 +148,8 @@ for other ways to handle these events.
 
 The market can become unreachable when network service is interrupted or if
 the mobile device enters Airplane mode.
+
+It is safe to disregard this flag.
 
 ~~~
 if (billing.isMarketAvailable) {
@@ -136,65 +159,69 @@ if (billing.isMarketAvailable) {
 }
 ~~~
 
-## Methods
+### billing.onPurchase (itemName)
 
-### billing.purchase (itemName, next(fail))
++ `callback {function}` ---Set to your callback function.
+			The first argument will be the name of the item that should be credited to the player.
+
+Called whenever a purchase completes.  This may also be called for a purchase that was outstanding from a previous session that had not been credited to the player yet.
+
+The callback function should not pop up the purchase success dialog while they are playing.  Setting the `billing.onPurchase` callback to **null** when purchases should not interrupt gameplay is recommended.
+
+~~~
+billing.onPurchase = function(itemName) {
+	logger.log("~~~ PURCHASED:", itemName);
+});
+~~~
+
+### billing.onFailure (reason, itemName)
+
++ `callback {function}` ---Set to your callback function.
+			The first argument will be the reason for the failure.
+			The second argument will be the name of the item that was requested.
+
+Handling failure events is optional.
+
+Common failure values:
+
++ "cancel" : User canceled the purchase or item was unavailable.
++ "service" : Not connected to the Market.  Try again later.
++ Other Reasons : Was not able to make purchase request for some other reason.
+
+## Methods:
+
+### billing.purchase (itemName)
 
 Parameters
 :    1. `itemName {string}` ---The item name string.
-     2. `callback {function}` ---The callback function.  First argument will be
-a string describing the failure reason if the purchase attempt failed.
 
 Returns
 :    1. `void`
 
-Initiate the purchase of an item by its SKU.
+Initiate the purchase of an item by its name.
 
-The purchase may fail if the player clicks to deny the purchase, or if the user
-has already purchased the item, or if the network is unavailable, as examples.
+The purchase may fail if the player clicks to deny the purchase, or if the network is unavailable, among other reasons.  If the purchase fails, the `billing.onFailure` handler will be called.  Handling failures is optional.
 
-Failure values:
-
-+ null : Purchase success.
-+ "service" : Not connected to the Market.  Try again later.
-+ "cancel" : User canceled the purchase or item was unavailable.
-+ Other Reasons : Was not able to make purchase request for some other reason.
+If the purchase succeeds, then the `billing.onPurchase` callback you set will be called.  This callback should be where you credit the user for the purchase.
 
 ~~~
-billing.purchase("android.test.purchased", function(fail) {
-	if (fail) {
-		logger.log("~~~ PURCHASE FAILED:", fail);
-	} else {
-		logger.log("~~~ PURCHASE SUCCESS");
-	}
-});
+billing.purchase("fiveCoins");
 ~~~
 
-### billing.handleOldPurchases (next(itemNames))
+## Test API
 
-Parameters
-:    1. `callback {function}` ---The callback function.
-			The first argument will be an array of item name strings for all of the prior purchases.
+To support testing the purchase API in a cross-platform way, you can use the following special item names:
 
-Returns
-:    1. `void`
+### Simulating Success
 
-Gets the list of purchased item SKUs.  These are outstanding from previous
-purchases but have not been credited to the player yet.
-
-WARNING: This function may complete at any time as the market becomes available.
-
-The handler should be resilient and work regardless of what state the game is in.
-For instance, the callback function should not pop up the purchase success
-dialog while they are playing.
+Prepending TESTPURCHASE to your item name as in "TESTPURCHASE:NAME" will cause a simulated successful purchase.
 
 ~~~
-billing.handleOldPurchases(function(itemNames) {
-	for (var ii = 0; ii < items.length; ++ii) {
-		var itemName = itemNames[ii];
-
-		logger.log("~~~ PRIOR PURCHASE:", itemName);
-	}
-});
+billing.purchase("TESTPURCHASE:fiveCoins");
 ~~~
 
+### Simulating Failure
+
+Running a purchase 
+
++ "FAILPURCHASE:REASON" : Purchase will fail with the given reason string passed to the callback.

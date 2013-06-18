@@ -1,4 +1,5 @@
 import device;
+import util.setProperty as setProperty;
 
 // If on true native mobile platform,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
@@ -98,39 +99,36 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		call(evt.failure);
 	});
 
-	NATIVE.events.registerHandler('billingOwned', function(evt) {
-		logger.log("Got billingOwned event:", JSON.stringify(evt));
-
-		// Add owned items
-		var skus = evt.skus;
-		var tokens = evt.tokens;
-		if (skus && skus.length > 0) {
-			for (var ii = 0, len = skus.length; ii < len; ++ii) {
-				var sku = skus[ii];
-				var token = tokens[ii];
-
-				ownedSet[sku] = token;
-				tokenSet[token] = sku;
-				ownedArray.push(sku);
-			}
+	function handleOldPurchases(next) {
+		if (typeof next !== "function") {
+			logger.debug("WARNING: billing.handleOldPurchases ignored without a callback");
+			return;
 		}
 
-		gotOwned = true;
-
-		// Call owned callbacks
-		for (var ii = 0; ii < onOwned.length; ++ii) {
-			onOwned[ii](ownedArray);
+		for (var ii = 0; ii < ownedArray.length; ++ii) {
+			next(ownedArray[ii]);
 		}
-		onOwned.length = 0;
-	});
+	}
 
 	var Billing = Class(Emitter, function (supr) {
+		var onPurchase, onFailure;
+
 		this.init = function() {
 			supr(this, 'init', arguments);
+
+			setProperty(this, "onPurchase", {
+				set: function(f) {
+					onPurchase = f;
+
+				}
+				get: function() {
+					return onPurchase;
+				}
+			});
 		};
 
 		this.purchase = function(sku, next) {
-			if (typeof next != "function") {
+			if (typeof next !== "function") {
 				logger.debug("WARNING: billing.purchase ignored without a callback");
 				return;
 			}
@@ -156,11 +154,19 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			});
 		};
 
+		this.
+
+		this.onOldPurchase = null;
+
+		var purchaseHandler = null;
+
 		this.handleOldPurchases = function(next) {
-			if (typeof next != "function") {
+			if (typeof next !== "function") {
 				logger.debug("WARNING: billing.handleOldPurchases ignored without a callback");
 				return;
 			}
+
+			this.purchaseHandler = 
 
 			// If already got owned list,
 			if (gotOwned) {
@@ -177,21 +183,48 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 	GLOBAL.billing = new Billing;
 
-		isPurchased: function(sku, next) {
-			if (typeof next == "function") {
-				// If already got owned list,
-				if (gotOwned) {
-					// Complete immediately
-					next(ownedSet[sku]);
-				} else {
-					// Add to callback list
-					onOwned.push(function() {
-						next(ownedSet[sku]);
-					});
+	// Wait a couple of seconds to avoid slowing down the startup process
+	var ownedRetryID = setTimeout(function() {
+		NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+		ownedRetryID = null;
+	}, 3000);
+
+	NATIVE.events.registerHandler('billingOwned', function(evt) {
+		logger.log("Got billingOwned event:", JSON.stringify(evt));
+
+		if (ownedRetryID !== null) {
+			clearTimeout(ownedRetryID);
+		}
+
+		// If attempt failed,
+		if (evt.failure) {
+			ownedRetryID = setTimeout(function() {
+				NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+				ownedRetryID = null;
+			}, 10000);
+		} else {
+			// Add owned items
+			var skus = evt.skus;
+			var tokens = evt.tokens;
+			if (skus && skus.length > 0) {
+				for (var ii = 0, len = skus.length; ii < len; ++ii) {
+					var sku = skus[ii];
+					var token = tokens[ii];
+
+					ownedSet[sku] = token;
+					tokenSet[token] = sku;
+					ownedArray.push(sku);
+
+					// Attempt to consume it immediately
+					NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
+						token: token
+					}));
 				}
 			}
-		},
-	}
+
+			gotOwned = true;
+		}
+	});
 
 	var isConnected = false;
 
@@ -200,9 +233,21 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 		if (isConnected != evt.connected) {
 			GLOBAL.billing.emit("MarketAvailable", isConnected);
+
+			isConnected = evt.connected;
+
+			// If just connected,
+			if (isConnected) {
+				// If still waiting for owned list
+				if (!gotOwned) {
+					// Try to get purchases immediately to react faster
+					if (ownedRetryID !== null) {
+						clearTimeout(ownedRetryID);
+					}
+					NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+				}
+			}
 		}
 	});
-
-	NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 }
 
