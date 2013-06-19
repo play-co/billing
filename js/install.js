@@ -1,4 +1,5 @@
 import device;
+import event.Emitter as Emitter;
 import util.setProperty as setProperty;
 
 /*
@@ -133,7 +134,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					if (onPurchase) {
 						creditAllConsumedItems();
 					}
-				}
+				},
 				get: function() {
 					return onPurchase;
 				}
@@ -141,7 +142,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 			setProperty(this, "isMarketAvailable", {
 				set: function(f) {
-				}
+				},
 				get: function() {
 					return true;
 				}
@@ -238,7 +239,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					if (onPurchase) {
 						creditAllConsumedItems();
 					}
-				}
+				},
 				get: function() {
 					return onPurchase;
 				}
@@ -246,7 +247,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 			setProperty(this, "isMarketAvailable", {
 				set: function(f) {
-				}
+				},
 				get: function() {
 					return isConnected == true;
 				}
