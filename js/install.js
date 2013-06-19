@@ -1,74 +1,206 @@
 import device;
 import util.setProperty as setProperty;
 
-// If on true native mobile platform,
+/*
+ * Items are first purchased, and then consumed.
+ *
+ * When they are consumed they must not be lost, so they are either
+ * delivered to the billing.onPurchase callback or must be stored in
+ * localStorage for delivery on the next run.
+ */
+
+var purchasedItems = {};
+var consumedItems = {};
+var onPurchase; // callback after consumption
+var onFailure; // callback on purchase failure (not consume fail)
+
+/*
+ * Read the list of consumed items during startup.
+ */
+function initializeFromLocalStorage() {
+	try {
+		var saved = localStorage.getItem("billingConsumed");
+
+		if (saved) {
+			var consumed = JSON.parse(saved);
+
+			if (typeof consumed === "object") {
+				// Merge with consumed items
+				var count = 0;
+				for (var item in consumed) {
+					consumedItems[item] = 1;
+					++count;
+				}
+				logger.log("Read", count, "consumed purchased items");
+			}
+		}
+	} catch (e) {
+		logger.log("Failed to read consumed items from local storage:", e);
+	}
+}
+
+/*
+ * Mark an item as purchased but not consumed yet.
+ *
+ * This list is grabbed from the market so we do not need to store this
+ * information locally, yet.
+ */
+function purchasedItem(item) {
+	try {
+		purchasedItems[item] = 1;
+	} catch (e) {
+		logger.log("Purchase update failed with error:", e);
+	}
+}
+
+/*
+ * Attempt to credit a player for their consumed item, and remove it from the
+ * consumed items list in local storage on success.
+ */
+function creditConsumedItem(item) {
+	try {
+		if (typeof onPurchase === "function" && consumedItems[item]) {
+			onPurchase(item);
+
+			delete consumedItems[item];
+			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
+
+			logger.log("Successfully credited consumed item:", item);
+		}
+	} catch (e) {
+		logger.log("Crediting purchase failed with error:", e);
+	}
+}
+
+/*
+ * Move an item from the purchased list to the consumed list and update
+ * local storage so that it does not get lost.
+ */
+function consumePurchasedItem(item) {
+	try {
+		if (purchasedItem[item]) {
+			delete purchasedItem[item];
+			consumedItems[item] = 1;
+
+			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
+
+			logger.log("Successfully consumed purchased item:", item);
+
+			creditConsumedItem(item);
+		}
+	} catch (e) {
+		logger.log("Crediting purchase failed with error:", e);
+	}
+}
+
+/*
+ * Credit all outstanding consumed items.
+ */
+function creditAllConsumedItems() {
+	var consumed = [];
+
+	for (var item in consumedItems) {
+		if (consumedItems[item]) {
+			consumed.push(item);
+		}
+	}
+
+	for (var ii = 0; ii < consumed.length; ++ii) {
+		var item = consumed[ii];
+
+		creditConsumedItem(item);
+	}
+}
+
+
+// Run initialization tasks
+initializeFromLocalStorage();
+
+
+// If just simulating native device,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	logger.log("Installing fake billing API");
+
+	var Billing = Class(Emitter, function (supr) {
+		this.init = function() {
+			supr(this, 'init', arguments);
+
+			setProperty(this, "onPurchase", {
+				set: function(f) {
+					onPurchase = f;
+
+					// If a callback is being set,
+					if (onPurchase) {
+						creditAllConsumedItems();
+					}
+				}
+				get: function() {
+					return onPurchase;
+				}
+			});
+
+			setProperty(this, "isMarketAvailable", {
+				set: function(f) {
+				}
+				get: function() {
+					return true;
+				}
+			});
+		};
+
+		// Failure callback function
+		this.onFailure = null;
+
+		// Purchase
+		this.purchase = function(item) {
+			// TODO
+		};
+	});
+
+	GLOBAL.billing = new Billing;
+
 } else {
 	logger.log("Installing JS billing component for native");
 
-	var purchasing = {};
-	var onPurchase = {};
+	// Maps of tokens <-> items from market
+	var tokenItem = {};
+	var itemToken = {};
 
-	var gotOwned = false;
-	var onOwned = [];
-	var ownedSet = {};
-	var ownedArray = [];
+	// Flag: Has read purchases from the market?
+	var readPurchases = false;
 
-	var onConsume = {};
-	var tokenSet = {};
+	// Flag: Is market available?
+	var isConnected = false;
+
+	function nativePurchasedItem(sku, token) {
+		// Set up map
+		tokenItem[token] = sku;
+		itemToken[sku] = token;
+
+		// Record purchases
+		purchasedItem(sku);
+
+		// Attempt to consume it immediately
+		NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
+			token: token
+		}));
+	}
 
 	NATIVE.events.registerHandler('billingPurchase', function(evt) {
 		logger.log("Got billingPurchase event:", JSON.stringify(evt));
 
-		// NOTE: Function is organized carefully for callback reentrancy
-
 		// If SKU event,
 		var sku = evt.sku;
-		if (!sku) {
-			logger.log("Clearing all pending purchases on null SKU");
+		if (!sku || evt.failure) {
+			var failure = evt.failure || "cancel";
 
-			// Clear all pending purchases
-			for (var sku in ownedSet) {
-				// If purchase callbacks are installed,
-				var calls = onPurchase[sku];
-				if (calls && calls.length > 0) {
-					// For each callback,
-					for (var ii = 0; ii < calls.length; ++ii) {
-						// Run it
-						calls[ii]("cancel");
-					}
+			logger.log("Unable to purchase item", sku, ":", failure);
 
-					// Clear callbacks
-					calls.length = 0;
-				}
-
-				purchasing = {};
+			if (typeof onFailure === "function") {
+				onFailure(failure, sku);
 			}
 		} else {
-			// If not failed,
-			if (!evt.failure) {
-				// Mark it owned
-				ownedSet[sku] = evt.token;
-				tokenSet[evt.token] = sku;
-				ownedArray.push(sku);
-			}
-
-			// If purchase callbacks are installed,
-			var calls = onPurchase[sku];
-			if (calls && calls.length > 0) {
-				// For each callback,
-				for (var ii = 0; ii < calls.length; ++ii) {
-					// Run it
-					calls[ii](evt.failure);
-				}
-
-				// Clear callbacks
-				calls.length = 0;
-			}
-
-			// Disable purchasing flag
-			purchasing[sku] = undefined;
+			nativePurchasedItem(sku, evt.token);
 		}
 	});
 
@@ -78,41 +210,23 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		// NOTE: Function is organized carefully for callback reentrancy
 
 		var token = evt.token;
-		var sku = tokenSet[token];
+		var item = tokenToItem[token];
 
 		// If not failed,
 		if (!evt.failure) {
-			// Remove from lists
-			ownedSet[sku] = undefined;
-			tokenSet[token] = undefined;
+			consumePurchasedItem(item);
+		} else {
+			logger.log("Failed to consume token", token, "for item", item, "and will retry in 3 seconds...");
 
-			// Remove from ownedArray
-			var index = ownedArray.indexOf(sku);
-			ownedArray.splice(index, 1);
+			setTimeout(function() {
+				NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
+					token: token
+				}));
+			}, 3000);
 		}
-
-		// Clear consume callback
-		var call = onConsume[sku];
-		onConsume[sku] = undefined;
-
-		// Run consume callback
-		call(evt.failure);
 	});
 
-	function handleOldPurchases(next) {
-		if (typeof next !== "function") {
-			logger.debug("WARNING: billing.handleOldPurchases ignored without a callback");
-			return;
-		}
-
-		for (var ii = 0; ii < ownedArray.length; ++ii) {
-			next(ownedArray[ii]);
-		}
-	}
-
 	var Billing = Class(Emitter, function (supr) {
-		var onPurchase, onFailure;
-
 		this.init = function() {
 			supr(this, 'init', arguments);
 
@@ -120,64 +234,34 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 				set: function(f) {
 					onPurchase = f;
 
+					// If a callback is being set,
+					if (onPurchase) {
+						creditAllConsumedItems();
+					}
 				}
 				get: function() {
 					return onPurchase;
 				}
 			});
-		};
 
-		this.purchase = function(sku, next) {
-			if (typeof next !== "function") {
-				logger.debug("WARNING: billing.purchase ignored without a callback");
-				return;
-			}
-
-			billing.isPurchased(sku, function(owned) {
-				if (owned) {
-					next("already owned");
-				} else {
-					// If already waiting for a purchase callback,
-					if (purchasing[sku] == 1) {
-						onPurchase[sku].push(next);
-					} else {
-						// We are now purchasing it
-						purchasing[sku] = 1;
-						onPurchase[sku] = [next];
-
-						// Kick it off
-						NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
-							"sku": sku
-						}));
-					}
+			setProperty(this, "isMarketAvailable", {
+				set: function(f) {
+				}
+				get: function() {
+					return isConnected == true;
 				}
 			});
 		};
 
-		this.
+		// Failure callback function
+		this.onFailure = null;
 
-		this.onOldPurchase = null;
-
-		var purchaseHandler = null;
-
-		this.handleOldPurchases = function(next) {
-			if (typeof next !== "function") {
-				logger.debug("WARNING: billing.handleOldPurchases ignored without a callback");
-				return;
-			}
-
-			this.purchaseHandler = 
-
-			// If already got owned list,
-			if (gotOwned) {
-				// Complete immediately
-				next(ownedArray);
-			} else {
-				if (typeof(next) == "function") {
-					// Add to callback list
-					onOwned.push(next);
-				}
-			}
+		// Purchase
+		this.purchase = function(item) {
+			// Kick it off
+			NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+				"sku": item
+			}));
 		};
 	});
 
@@ -185,8 +269,10 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 	// Wait a couple of seconds to avoid slowing down the startup process
 	var ownedRetryID = setTimeout(function() {
-		NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 		ownedRetryID = null;
+		if (!readPurchases) {
+			NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+		}
 	}, 3000);
 
 	NATIVE.events.registerHandler('billingOwned', function(evt) {
@@ -194,39 +280,30 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 		if (ownedRetryID !== null) {
 			clearTimeout(ownedRetryID);
+			ownedRetryID = null;
 		}
 
 		// If attempt failed,
 		if (evt.failure) {
 			ownedRetryID = setTimeout(function() {
-				NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 				ownedRetryID = null;
+				if (!readPurchases) {
+					NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+				}
 			}, 10000);
 		} else {
+			readPurchases = true;
+
 			// Add owned items
 			var skus = evt.skus;
 			var tokens = evt.tokens;
 			if (skus && skus.length > 0) {
 				for (var ii = 0, len = skus.length; ii < len; ++ii) {
-					var sku = skus[ii];
-					var token = tokens[ii];
-
-					ownedSet[sku] = token;
-					tokenSet[token] = sku;
-					ownedArray.push(sku);
-
-					// Attempt to consume it immediately
-					NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
-						token: token
-					}));
+					nativePurchasedItem(sku[ii], tokens[ii]);
 				}
 			}
-
-			gotOwned = true;
 		}
 	});
-
-	var isConnected = false;
 
 	NATIVE.events.registerHandler('billingConnected', function(evt) {
 		logger.log("Got billingConnected event:", JSON.stringify(evt));
@@ -238,12 +315,13 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 
 			// If just connected,
 			if (isConnected) {
-				// If still waiting for owned list
-				if (!gotOwned) {
-					// Try to get purchases immediately to react faster
-					if (ownedRetryID !== null) {
-						clearTimeout(ownedRetryID);
-					}
+				if (ownedRetryID !== null) {
+					clearTimeout(ownedRetryID);
+					ownedRetryID = null;
+				}
+
+				// Try to get purchases immediately to react faster
+				if (!readPurchases) {
 					NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 				}
 			}

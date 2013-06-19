@@ -178,7 +178,11 @@ billing.onPurchase = function(itemName) {
 
 + `callback {function}` ---Set to your callback function.
 			The first argument will be the reason for the failure.
-			The second argument will be the name of the item that was requested.
+			The second argument will be the name of the item that was requested.  Sometimes the name will be `null`.
+
+Unlike the success callback, failures are not queued up for delivery.  When failures are not handled they are not reported.
+
+The `itemName` argument to the callback is not reliable.  Sometimes it will be `null`.
 
 Handling failure events is optional.
 
