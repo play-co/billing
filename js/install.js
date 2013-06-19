@@ -79,8 +79,8 @@ function creditConsumedItem(item) {
  */
 function consumePurchasedItem(item) {
 	try {
-		if (purchasedItem[item]) {
-			delete purchasedItem[item];
+		if (purchasedItems[item]) {
+			delete purchasedItems[item];
 			consumedItems[item] = 1;
 
 			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
@@ -113,65 +113,114 @@ function creditAllConsumedItems() {
 	}
 }
 
+/*
+ * Run purchase simulation.
+ */
+function simulatePurchase(item, simulate) {
+	if (!simulate || simulate === "simulate") {
+		setTimeout(function() {
+			logger.log("Simulating item purchase:", item);
+			if (!purchasedItems[item]) {
+				purchasedItem(item);
+				setTimeout(function() {
+					logger.log("Simulating item consume:", item);
+					consumePurchasedItem(item);
+				}, 2000);
+			} else {
+				logger.log("Item is already purchased.");
+				if (typeof onFailure === "function") {
+					onFailure("already owned", item);
+				}
+			}
+		}, 2000);
+	} else {
+		setTimeout(function() {
+			logger.log("Simulating item failure:", item);
+			if (typeof onFailure === "function") {
+				onFailure(simulate, item);
+			}
+		}, 1000);
+	}
+}
 
 // Run initialization tasks
 initializeFromLocalStorage();
 
+// Maps of tokens <-> items from market
+var tokenItem = {};
+var itemToken = {};
+
+// Flag: Has read purchases from the market?
+var readPurchases = false;
+
+// Flag: Is market available?
+var isConnected = true;
+
+var Billing = Class(Emitter, function (supr) {
+	this.init = function() {
+		supr(this, 'init', arguments);
+
+		setProperty(this, "onPurchase", {
+			set: function(f) {
+				// If a callback is being set,
+				if (typeof f === "function") {
+					onPurchase = f;
+
+					creditAllConsumedItems();
+				} else {
+					onPurchase = null;
+				}
+			},
+			get: function() {
+				return onPurchase;
+			}
+		});
+
+		setProperty(this, "onFailure", {
+			set: function(f) {
+				// If a callback is being set,
+				if (typeof f === "function") {
+					onFailure = f;
+				} else {
+					onFailure = null;
+				}
+			},
+			get: function() {
+				return onFailure;
+			}
+		});
+
+		setProperty(this, "isMarketAvailable", {
+			set: function(f) {
+			},
+			get: function() {
+				return isConnected == true;
+			}
+		});
+	};
+
+	this.purchase = simulatePurchase;
+});
 
 // If just simulating native device,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	logger.log("Installing fake billing API");
-
-	var Billing = Class(Emitter, function (supr) {
-		this.init = function() {
-			supr(this, 'init', arguments);
-
-			setProperty(this, "onPurchase", {
-				set: function(f) {
-					onPurchase = f;
-
-					// If a callback is being set,
-					if (onPurchase) {
-						creditAllConsumedItems();
-					}
-				},
-				get: function() {
-					return onPurchase;
-				}
-			});
-
-			setProperty(this, "isMarketAvailable", {
-				set: function(f) {
-				},
-				get: function() {
-					return true;
-				}
-			});
-		};
-
-		// Failure callback function
-		this.onFailure = null;
-
-		// Purchase
-		this.purchase = function(item) {
-			// TODO
-		};
-	});
-
-	GLOBAL.billing = new Billing;
-
 } else {
 	logger.log("Installing JS billing component for native");
 
-	// Maps of tokens <-> items from market
-	var tokenItem = {};
-	var itemToken = {};
+	// Override purchase function to hook into native
+	Billing.prototype.purchase = function(item, simulate) {
+		if (simulate) {
+			simulatePurchase(item, simulate);
+		} else {
+			NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+				"sku": item
+			}));
+		}
+	};
 
-	// Flag: Has read purchases from the market?
-	var readPurchases = false;
-
-	// Flag: Is market available?
-	var isConnected = false;
+	// Request initial market state
+	NATIVE.plugins.sendEvent("BillingPlugin", "isConnected", "{}");
 
 	function nativePurchasedItem(sku, token) {
 		// Set up map
@@ -226,47 +275,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			}, 3000);
 		}
 	});
-
-	var Billing = Class(Emitter, function (supr) {
-		this.init = function() {
-			supr(this, 'init', arguments);
-
-			setProperty(this, "onPurchase", {
-				set: function(f) {
-					onPurchase = f;
-
-					// If a callback is being set,
-					if (onPurchase) {
-						creditAllConsumedItems();
-					}
-				},
-				get: function() {
-					return onPurchase;
-				}
-			});
-
-			setProperty(this, "isMarketAvailable", {
-				set: function(f) {
-				},
-				get: function() {
-					return isConnected == true;
-				}
-			});
-		};
-
-		// Failure callback function
-		this.onFailure = null;
-
-		// Purchase
-		this.purchase = function(item) {
-			// Kick it off
-			NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
-				"sku": item
-			}));
-		};
-	});
-
-	GLOBAL.billing = new Billing;
 
 	// Wait a couple of seconds to avoid slowing down the startup process
 	var ownedRetryID = setTimeout(function() {
@@ -329,4 +337,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	});
 }
+
+GLOBAL.billing = new Billing;
 

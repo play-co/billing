@@ -194,10 +194,11 @@ Common failure values:
 
 ## Methods:
 
-### billing.purchase (itemName)
+### billing.purchase (itemName, [simulate])
 
 Parameters
-:    1. `itemName {string}` ---The item name string.
+:	1. `itemName {string}` ---The item name string.
+	2. `[simulate {string}]` ---Optional simulation mode: `undefined` means disabled. "simulate" means simulate a successful purchase.  Any other value will be used as a simulated failure string.
 
 Returns
 :    1. `void`
@@ -212,20 +213,11 @@ If the purchase succeeds, then the `billing.onPurchase` callback you set will be
 billing.purchase("fiveCoins");
 ~~~
 
-## Test API
+##### Simulation Mode
 
-To support testing the purchase API in a cross-platform way, you can use the following special item names:
-
-### Simulating Success
-
-Prepending TESTPURCHASE to your item name as in "TESTPURCHASE:NAME" will cause a simulated successful purchase.
+To test purchases without hitting the market, pass a second parameter of "SimulatePurchase" or "SimulateFailure".  On browser builds or in the web simulator, purchases will always simulate success otherwise.
 
 ~~~
-billing.purchase("TESTPURCHASE:fiveCoins");
+billing.purchase("fiveCoins", "simulate"); // Simulates success
+billing.purchase("fiveCoins", "cancel"); // Simulates failure "cancel"
 ~~~
-
-### Simulating Failure
-
-Running a purchase 
-
-+ "FAILPURCHASE:REASON" : Purchase will fail with the given reason string passed to the callback.

@@ -139,6 +139,16 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	public void isConnected(String jsonData) {
+		synchronized (mService) {
+			if (mService == null) {
+				EventQueue.pushEvent(new ConnectEvent(false));
+			} else {
+				EventQueue.pushEvent(new ConnectEvent(true));
+			}
+		}
+	}
+
 	public void purchase(String jsonData) {
 		boolean success = false;
 		String sku = null;
