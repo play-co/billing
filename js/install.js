@@ -211,7 +211,27 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	// Override purchase function to hook into native
 	Billing.prototype.purchase = function(item, simulate) {
 		if (simulate) {
-			simulatePurchase(item, simulate);
+			if (simulate == "simulate") {
+				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+					"sku": "android.test.purchased"
+				}));
+			} else if (simulate == "cancel") {
+				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+					"sku": "android.test.canceled"
+				}));
+			} else if (simulate == "refund") {
+				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+					"sku": "android.test.refunded"
+				}));
+			} else if (simulate == "unavailable") {
+				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+					"sku": "android.test.unavailable"
+				}));
+			} else {
+				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
+					"sku": "android.test.canceled"
+				}));
+			}
 		} else {
 			NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
 				"sku": item
