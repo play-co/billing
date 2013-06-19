@@ -77,7 +77,7 @@ public class BillingPlugin implements IPlugin {
 	public class ConnectedEvent extends com.tealeaf.event.Event {
 		boolean connected;
 
-		public OwnedEvent(boolean connected) {
+		public ConnectedEvent(boolean connected) {
 			super("billingConnected");
 			this.connected = connected;
 		}
