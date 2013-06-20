@@ -1,31 +1,14 @@
 #import "PluginManager.h"
 #import <StoreKit/StoreKit.h>
-#import <UIKit/UIKit.h>
 
+@interface BillingPlugin : GCPlugin<SKPaymentTransactionObserver>
 
-@interface PaymentObserver : UIViewController<SKPaymentTransactionObserver>
-
-@property (nonatomic, retain) NSMutableDictionary *inFlight;
-@property (nonatomic) bool hooked;
-
-- (PaymentObserver *) init;
-
-- (void) hookObserver;
-- (bool) marketAvailable;
-- (void) buy:(NSString *)identifier;
-- (void) restore;
-- (void) finishTransaction:(NSString *)transaction;
+@property (nonatomic, retain) SKPaymentQueue *queue;
+@property (nonatomic, retain) NSMutableDictionary *purchases;
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions;
 
-+ (PaymentObserver *) get;
-+ (void) shutdown;
-
-@end
-
-
-@interface BillingPlugin : GCPlugin
-
+- (void) isConnected:(NSDictionary *)jsonObject;
 - (void) purchase:(NSDictionary *)jsonObject;
 - (void) consume:(NSDictionary *)jsonObject;
 - (void) getPurchases:(NSDictionary *)jsonObject;

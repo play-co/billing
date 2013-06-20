@@ -1,111 +1,102 @@
-#import "Purchases.h"
+#import "BillingPlugin.h"
 
-static PaymentObserver *m_payob = nil;
+@implementation BillingPlugin
 
-@implementation PaymentObserver
-
-+ (PaymentObserver *) get {
-	if (!m_payob) {
-		m_payob = [[PaymentObserver alloc] init];
-	}
-	
-	return m_payob;
-}
-
-+ (void) shutdown {
-	if (m_payob) {
-		[m_payob release];
-		
-		m_payob = nil;
-	}
-}
-
-- (PaymentObserver *) init {
-	self = [super init];
-	
-	self.store = [[[PurchaseApi alloc] init] autorelease];
-	self.hooked = false;
-	self.inFlight = [[[NSMutableDictionary alloc] init] autorelease];
-	
-	[self hookObserver];
-	
-	LOG("{payment} Initialized");
-	
-	return self;
-}
-
+// The plugin must call super dealloc.
 - (void) dealloc {
-	self.store = nil;
-	self.inFlight = nil;
-	
-	if (self.hooked) {
-		[[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
+	if (self.queue != nil) {
+		[self.queue removeTransactionObserver:self];
 	}
-	
+
+	self.queue = nil;
+	self.purchases = nil;
+
 	[super dealloc];
 }
 
-- (void)hookObserver {
-	self.hooked = true;
-	
-	[[SKPaymentQueue defaultQueue] addTransactionObserver:self];
-}
-
-- (bool)marketAvailable {
-	return [self.store available];
-}
-
-- (void) buy: (NSString*) identifier {
-	[self.store buy:identifier];
-}
-
-- (void) restore {
-	[self.store restore];
-}
-
-- (void) finishTransaction:(NSString *)transactionId {
-	
-	SKPaymentTransaction *transaction = [self.inFlight objectForKey:transactionId];
-	
-	if (transaction != nil) {
-		[self.store finish:transaction];
-		
-		[self.inFlight removeObjectForKey:transactionId];
+// The plugin must call super init.
+- (id) init {
+	self = [super init];
+	if (!self) {
+		return nil;
 	}
+
+	self.purchases = [NSMutableDictionary dictionary];
+
+	self.queue = [SKPaymentQueue defaultQueue];
+	[self.queue addTransactionObserver:self];
+
+	return self;
+}
+
+- (void) completeTransaction:(SKPaymentTransaction *)transaction {
+	NSString *sku = transaction.payment.productIdentifier;
+	NSString *token = transaction.transactionIdentifier;
+	
+    [self.queue finishTransaction: transaction];
+}
+
+- (void) failedTransaction: (SKPaymentTransaction *)transaction {
+	NSString *sku = transaction.payment.productIdentifier;
+
+	// Generate error code string
+	NSString *errorCode = @"failed";
+	switch (transaction.error.code) {
+		case SKErrorClientInvalid:
+			errorCode = @"client invalid";
+			break;
+		case SKErrorPaymentCancelled:
+			errorCode = @"cancel";
+			break;
+		case SKErrorPaymentInvalid:
+			errorCode = @"payment invalid";
+			break;
+		case SKErrorPaymentNotAllowed:
+			errorCode = @"payment not allowed";
+			break;
+		case SKErrorStoreProductNotAvailable:
+			errorCode = @"item unavailable";
+			break;
+	}
+
+	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+										  @"billingConnected",@"name",
+										  ([SKPaymentQueue canMakePayments] ? kCFBooleanTrue : kCFBooleanFalse), @"connected",
+										  nil]];
+
+    [self.queue finishTransaction: transaction];
 }
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions {
-	for (SKPaymentTransaction* transaction in transactions) {
-		
-		// Normalize state codes to work the same way as on Android
-		int stateCode = 0; // Success by default
-		
-		// If not success,
-		if (transaction.transactionState != SKPaymentTransactionStatePurchased) {
-			switch (transaction.error.code) {
-				case SKPaymentTransactionStatePurchasing:
-					// Should actually ignore this event because JS does not care
-					return; // Ignore it!
-				case SKPaymentTransactionStateFailed:
-					// TODO: check if this means canceled, refunded, or expired
-					stateCode = 1;
-					break;
-				case SKPaymentTransactionStateRestored:
-					// TODO: This is a store-remembered thing that doesn't exist on Android so we need to add it eventually.
-					// It would make a lot of sense to do this with our server instead of iTunes
-					// But for now if we get this it actually should be handled like a successful purchase
-					stateCode = 0;
-					break;
-				default:
-					// Who knows what kind of state we are in here, assume an error occurred somewhere
-					stateCode = 1;
-					break;
-			}
+	for (SKPaymentTransaction *transaction in transactions) {
+		NSString *sku = transaction.payment.productIdentifier;
+		NSString *token = transaction.transactionIdentifier;
+
+		switch (transaction.transactionState) {
+			case SKPaymentTransactionStatePurchased:
+				LOG(@"{billing} Transaction completed purchase for sku=%@ and token=%@", sku, token);
+				[self completeTransaction:transaction];
+				break;
+			case SKPaymentTransactionStateRestored:
+				LOG(@"{billing} Transaction restored for sku=%@ and token=%@", sku, token);
+				[self completeTransaction:transaction];
+				break;
+			case SKPaymentTransactionStatePurchasing:
+				LOG(@"{billing} Transaction purchasing for sku=%@ and token=%@", sku, token);
+				break;
+			case SKPaymentTransactionStateFailed:
+				LOG(@"{billing} Transaction failed with error code %@ for sku=%@ and token=%@", transaction.error.code, sku, token);
+				[self failedTransaction:transaction];
+				break;
+			default:
+				LOG(@"{billing} Unknown transaction error code: %@ for sku=%@ and token=%@", transaction.error.code, sku, token);
+				break;
 		}
-		
-		// Store it off
+
+		[[SKPaymentQueue defaultQueue] finishTransaction:transaction];
+
 		[self.inFlight setObject:transaction forKey:transaction.transactionIdentifier];
-		
+
 		js_core *instance = [js_core lastJS];
 		
 		const char *product = [transaction.payment.productIdentifier UTF8String];
@@ -122,7 +113,7 @@ static PaymentObserver *m_payob = nil;
 				product += storePrefixLen + 1; // +1 for trailing dot.
 			}
 		}
-		
+
 		//TODO: USE JANSSON
 		static const char *argFormat = "{\"name\":\"purchase\",\"state\":%d,\"product\":\"%s\",\"order\":\"%s\",\"notifyId\":\"%s\"}";
 		int argLen = strlen(argFormat) + strlen(product) + strlen(order) + strlen(notifyId) + 20;
@@ -138,32 +129,21 @@ static PaymentObserver *m_payob = nil;
 	}
 }
 
-@end
-
-
-@implementation BillingPlugin
-
-// The plugin must call super dealloc.
-- (void) dealloc {
-	[super dealloc];
-}
-
-// The plugin must call super init.
-- (id) init {
-	self = [super init];
-	if (!self) {
-		return nil;
-	}
-	
-	return self;
-}
-
 - (void) initializeWithManifest:(NSDictionary *)manifest appDelegate:(TeaLeafAppDelegate *)appDelegate {
-	NSLOG(@"{geoloc} Initialized with manifest");
+	NSLOG(@"{billing} Initialized with manifest");
+}
+
+- (void) isConnected:(NSDictionary *)jsonObject {
+	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+										  @"billingConnected",@"name",
+										  ([SKPaymentQueue canMakePayments] ? kCFBooleanTrue : kCFBooleanFalse), @"connected",
+										  nil]];
 }
 
 - (void) purchase:(NSDictionary *)jsonObject {
-	
+	SKPayment *payment = [SKPayment paymentWithProduct:sku];
+
+	[self.queue addPayment:payment];
 }
 
 - (void) consume:(NSDictionary *)jsonObject {
