@@ -210,6 +210,22 @@ var Billing = Class(Emitter, function (supr) {
 
 GLOBAL.billing = new Billing;
 
+function onMarketStateChange() {
+	var available = isConnected && isOnline;
+
+	if (available != isMarketAvailable) {
+		isMarketAvailable = available;
+
+		if (available) {
+			logger.log("Market is now available");
+		} else {
+			logger.log("Market is now unavailable");
+		}
+
+		GLOBAL.billing.emit("MarketAvailable", available);
+	}
+}
+
 // If just simulating native device,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	logger.log("Installing fake billing API");
@@ -342,35 +358,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	});
 
-	function onMarketStateChange() {
-		var available = isConnected && isOnline;
-
-		if (available != isMarketAvailable) {
-			isMarketAvailable = available;
-
-			if (available) {
-				logger.log("Market is now available");
-			} else {
-				logger.log("Market is now unavailable");
-			}
-
-			// If just connected,
-			if (isMarketAvailable) {
-				if (ownedRetryID !== null) {
-					clearTimeout(ownedRetryID);
-					ownedRetryID = null;
-				}
-
-				// Try to get purchases immediately to react faster
-				if (!readPurchases) {
-					NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
-				}
-			}
-	
-			GLOBAL.billing.emit("MarketAvailable", available);
-		}
-	}
-
 	NATIVE.events.registerHandler('billingConnected', function(evt) {
 		logger.log("Got billingConnected event:", JSON.stringify(evt));
 
@@ -391,7 +378,22 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		onMarketStateChange();
 	});
 
-	// Run initial state check
-	onMarketStateChange();
+	GLOBAL.billing.on("MarketAvailable", function(available) {
+		// If just connected,
+		if (available) {
+			if (ownedRetryID !== null) {
+				clearTimeout(ownedRetryID);
+				ownedRetryID = null;
+			}
+
+			// Try to get purchases immediately to react faster
+			if (!readPurchases) {
+				NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
+			}
+		}
+	});
 }
+
+// Run initial state check
+onMarketStateChange();
 
