@@ -14,6 +14,8 @@ import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.Iterator;
 
 import com.tealeaf.plugin.IPlugin;
 import android.app.Activity;
@@ -39,6 +41,7 @@ public class BillingPlugin implements IPlugin {
 	Activity _activity = null;
 	IInAppBillingService mService = null;
 	ServiceConnection mServiceConn = null;
+	Object mServiceLock = new Object();
 	static private final int BUY_REQUEST_CODE = 123450;
 
 	public class PurchaseEvent extends com.tealeaf.event.Event {
@@ -92,21 +95,21 @@ public class BillingPlugin implements IPlugin {
 		mServiceConn = new ServiceConnection() {
 			@Override
 				public void onServiceDisconnected(ComponentName name) {
-					synchronized (mService) {
+					synchronized (mServiceLock) {
 						mService = null;
 					}
 
-					EventQueue.pushEvent(new ConnectEvent(false));
+					EventQueue.pushEvent(new ConnectedEvent(false));
 				}
 
 			@Override
 				public void onServiceConnected(ComponentName name, 
 						IBinder service) {
-					synchronized (mService) {
+					synchronized (mServiceLock) {
 						mService = IInAppBillingService.Stub.asInterface(service);
 					}
 
-					EventQueue.pushEvent(new ConnectEvent(true));
+					EventQueue.pushEvent(new ConnectedEvent(true));
 				}
 		};
 	}
@@ -140,11 +143,11 @@ public class BillingPlugin implements IPlugin {
 	}
 
 	public void isConnected(String jsonData) {
-		synchronized (mService) {
+		synchronized (mServiceLock) {
 			if (mService == null) {
-				EventQueue.pushEvent(new ConnectEvent(false));
+				EventQueue.pushEvent(new ConnectedEvent(false));
 			} else {
-				EventQueue.pushEvent(new ConnectEvent(true));
+				EventQueue.pushEvent(new ConnectedEvent(true));
 			}
 		}
 	}
@@ -159,7 +162,9 @@ public class BillingPlugin implements IPlugin {
 
 			logger.log("{billing} Purchasing:", sku);
 
-			synchronized (mService) {
+			Bundle buyIntentBundle = null;
+
+			synchronized (mServiceLock) {
 				if (mService == null) {
 					EventQueue.pushEvent(new PurchaseEvent(sku, null, "service"));
 					return;
@@ -167,7 +172,7 @@ public class BillingPlugin implements IPlugin {
 
 				// TODO: Add additional security with extra field ("1")
 
-				Bundle buyIntentBundle = mService.getBuyIntent(3, _ctx.getPackageName(),
+				buyIntentBundle = mService.getBuyIntent(3, _ctx.getPackageName(),
 						sku, "inapp", "1");
 			}
 
@@ -204,9 +209,11 @@ public class BillingPlugin implements IPlugin {
 			final String TOKEN = jsonObject.getString("token");
 			token = TOKEN;
 
-			if (mService == null) {
-				EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
-				return;
+			synchronized (mServiceLock) {
+				if (mService == null) {
+					EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
+					return;
+				}
 			}
 
 			logger.log("{billing} Consuming:", TOKEN);
@@ -218,7 +225,7 @@ public class BillingPlugin implements IPlugin {
 
 						int response = 1;
 
-						synchronized (mService) {
+						synchronized (mServiceLock) {
 							if (mService == null) {
 								EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
 								return;
@@ -258,7 +265,7 @@ public class BillingPlugin implements IPlugin {
 
 			Bundle ownedItems = null;
 
-			synchronized (mService) {
+			synchronized (mServiceLock) {
 				if (mService == null) {
 					EventQueue.pushEvent(new OwnedEvent(null, null, "service"));
 					return;
@@ -310,16 +317,49 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	private String getResponseCode(Intent data) {
+		try {
+			Bundle bundle = data.getExtras();
+
+			int responseCode = bundle.getInt("RESPONSE_CODE");
+
+			switch (responseCode) {
+				case 0:
+					return "ok";
+				case 1:
+					return "cancel";
+				case 2:
+					return "service";
+				case 3:
+					return "billing unavailable";
+				case 4:
+					return "item unavailable";
+				case 5:
+					return "invalid arguments provided to API";
+				case 6:
+					return "fatal error in API";
+				case 7:
+					return "already owned";
+				case 8:
+					return "item not owned";
+			}
+		} catch (Exception e) {
+		}
+
+		return "unknown error";
+	}
+
 	public void onActivityResult(Integer request, Integer resultCode, Intent data) {
 		if (request == BUY_REQUEST_CODE) {
-			String purchaseData = data.getStringExtra("INAPP_PURCHASE_DATA");
-			String sku = null;
+			try {
+				String purchaseData = data.getStringExtra("INAPP_PURCHASE_DATA");
+				String sku = null;
+				String responseCode = this.getResponseCode(data);
 
-			if (purchaseData == null) {
-				logger.log("{billing} WARNING: Ignored null purchase data");
-				EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
-			} else {
-				try {
+				if (purchaseData == null) {
+					logger.log("{billing} WARNING: Ignored null purchase data with result code:", resultCode, "and response code:", responseCode);
+					EventQueue.pushEvent(new PurchaseEvent(null, null, responseCode));
+				} else {
 					JSONObject jo = new JSONObject(purchaseData);
 					sku = jo.getString("productId");
 
@@ -334,20 +374,19 @@ public class BillingPlugin implements IPlugin {
 								EventQueue.pushEvent(new PurchaseEvent(sku, token, null));
 								break;
 							case Activity.RESULT_CANCELED:
-								logger.log("{billing} Purchase canceled for SKU:", sku);
-								EventQueue.pushEvent(new PurchaseEvent(sku, null, "cancel"));
+								logger.log("{billing} Purchase canceled for SKU:", sku, "with result code:", resultCode, "and response code:", responseCode);
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, responseCode));
 								break;
 							default:
-								logger.log("{billing} WARNING: Unexpected response code:", resultCode, "for", sku);
-								EventQueue.pushEvent(new PurchaseEvent(sku, null, "failed"));
+								logger.log("{billing} Unexpected result code for SKU:", sku, "with result code:", resultCode, "and response code:", responseCode);
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, responseCode));
 						}
 					}
 				}
-				catch (JSONException e) {
-					logger.log("{billing} WARNING: Failed to parse purchase data:", e);
-					e.printStackTrace();
-					EventQueue.pushEvent(new PurchaseEvent(null, null, "cancel"));
-				}
+			} catch (JSONException e) {
+				logger.log("{billing} WARNING: Failed to parse purchase data:", e);
+				e.printStackTrace();
+				EventQueue.pushEvent(new PurchaseEvent(null, null, "failed"));
 			}
 		}
 	}

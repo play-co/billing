@@ -153,8 +153,14 @@ var itemToken = {};
 // Flag: Has read purchases from the market?
 var readPurchases = false;
 
-// Flag: Is market available?
+// Flag: Is market service connected?
 var isConnected = true;
+
+// Flag: Is connected to the Internet?
+var isOnline = navigator.onLine;
+
+// Flag: Is market available?
+var isMarketAvailable = false;
 
 var Billing = Class(Emitter, function (supr) {
 	this.init = function() {
@@ -194,13 +200,15 @@ var Billing = Class(Emitter, function (supr) {
 			set: function(f) {
 			},
 			get: function() {
-				return isConnected == true;
+				return isMarketAvailable == true;
 			}
 		});
 	};
 
 	this.purchase = simulatePurchase;
 });
+
+GLOBAL.billing = new Billing;
 
 // If just simulating native device,
 if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
@@ -280,7 +288,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		// NOTE: Function is organized carefully for callback reentrancy
 
 		var token = evt.token;
-		var item = tokenToItem[token];
+		var item = tokenItem[token];
 
 		// If not failed,
 		if (!evt.failure) {
@@ -334,16 +342,20 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	});
 
-	NATIVE.events.registerHandler('billingConnected', function(evt) {
-		logger.log("Got billingConnected event:", JSON.stringify(evt));
+	function onMarketStateChange() {
+		var available = isConnected && isOnline;
 
-		if (isConnected != evt.connected) {
-			GLOBAL.billing.emit("MarketAvailable", isConnected);
+		if (available != isMarketAvailable) {
+			isMarketAvailable = available;
 
-			isConnected = evt.connected;
+			if (available) {
+				logger.log("Market is now available");
+			} else {
+				logger.log("Market is now unavailable");
+			}
 
 			// If just connected,
-			if (isConnected) {
+			if (isMarketAvailable) {
 				if (ownedRetryID !== null) {
 					clearTimeout(ownedRetryID);
 					ownedRetryID = null;
@@ -354,9 +366,32 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 					NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 				}
 			}
+	
+			GLOBAL.billing.emit("MarketAvailable", available);
 		}
-	});
-}
+	}
 
-GLOBAL.billing = new Billing;
+	NATIVE.events.registerHandler('billingConnected', function(evt) {
+		logger.log("Got billingConnected event:", JSON.stringify(evt));
+
+		isConnected = evt.connected;
+
+		onMarketStateChange();
+	});
+
+	window.addEventListener("online", function() {
+		isOnline = true;
+
+		onMarketStateChange();
+	});
+
+	window.addEventListener("offline", function() {
+		isOnline = false;
+
+		onMarketStateChange();
+	});
+
+	// Run initial state check
+	onMarketStateChange();
+}
 
