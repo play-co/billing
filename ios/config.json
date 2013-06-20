@@ -1,9 +1,7 @@
 {
 	"code": [
-		"PaymentObserver.h",
-		"PaymentObserver.mm",
-		"Purchases.h",
-		"Purchases.mm"
+		"BillingPlugin.h",
+		"BillingPlugin.mm"
 	],
 	"frameworks": [
 		"StoreKit"
