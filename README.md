@@ -215,7 +215,7 @@ billing.purchase("fiveCoins");
 
 ##### Simulation Mode
 
-To test purchases without hitting the market, pass a second parameter of "SimulatePurchase" or "SimulateFailure".  On browser builds or in the web simulator, purchases will always simulate success otherwise.
+To test purchases without hitting the market, pass a second parameter of "simulate" or "cancel".  On browser builds or in the web simulator, purchases will always simulate success otherwise.
 
 ~~~
 billing.purchase("fiveCoins", "simulate"); // Simulates success
