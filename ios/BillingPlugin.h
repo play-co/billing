@@ -3,7 +3,6 @@
 
 @interface BillingPlugin : GCPlugin<SKPaymentTransactionObserver>
 
-@property (nonatomic, retain) SKPaymentQueue *queue;
 @property (nonatomic, retain) NSMutableDictionary *purchases;
 @property (nonatomic, retain) NSString *bundleID;
 

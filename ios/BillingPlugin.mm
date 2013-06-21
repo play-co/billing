@@ -5,11 +5,8 @@
 @implementation BillingPlugin
 
 - (void) dealloc {
-	if (self.queue != nil) {
-		[self.queue removeTransactionObserver:self];
-	}
+	[[SKPaymentQueue defaultQueue] removeTransactionObserver:self];
 
-	self.queue = nil;
 	self.purchases = nil;
 	self.bundleID = nil;
 
@@ -24,8 +21,7 @@
 
 	self.purchases = [NSMutableDictionary dictionary];
 
-	self.queue = [SKPaymentQueue defaultQueue];
-	[self.queue addTransactionObserver:self];
+	[[SKPaymentQueue defaultQueue] addTransactionObserver:self];
 
 	self.bundleID = @"unknown.bundle";
 
@@ -91,7 +87,7 @@
 										  errorCode,@"failure",
 										  nil]];
 
-    [self.queue finishTransaction: transaction];
+    [[SKPaymentQueue defaultQueue] finishTransaction: transaction];
 }
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions {
@@ -106,13 +102,13 @@
 				break;
 			case SKPaymentTransactionStateRestored:
 				NSLog(@"{billing} Ignoring restored transaction for sku=%@ and token=%@", sku, token);
-				[self.queue finishTransaction: transaction];
+				[[SKPaymentQueue defaultQueue] finishTransaction: transaction];
 				break;
 			case SKPaymentTransactionStatePurchasing:
 				NSLog(@"{billing} Transaction purchasing for sku=%@ and token=%@", sku, token);
 				break;
 			case SKPaymentTransactionStateFailed:
-				NSLog(@"{billing} Transaction failed with error code %d for sku=%@ and token=%@", (int)transaction.error.code, sku, token);
+				NSLog(@"{billing} Transaction failed with error code %d(%@) for sku=%@ and token=%@", (int)transaction.error.code, transaction.error.localizedDescription, sku, token);
 				[self failedTransaction:transaction];
 				break;
 			default:
@@ -158,7 +154,7 @@
 		SKPayment *payment = [SKPayment paymentWithProductIdentifier:productId];
 
 		if (!payment) {
-			NSLog(@"{billing} Failure purchasing unknown item: %@", sku);
+			NSLog(@"{billing} Failure purchasing unknown item: %@", productId);
 
 			[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 												  @"billingPurchase",@"name",
@@ -167,9 +163,9 @@
 												  @"not available",@"failure",
 												  nil]];
 		} else {
-			NSLog(@"{billing} Attempting to purchase item: %@", sku);
+			NSLog(@"{billing} Attempting to purchase item: %@", productId);
 
-			[self.queue addPayment:payment];
+			[[SKPaymentQueue defaultQueue] addPayment:payment];
 		}
 	}
 	@catch (NSException *exception) {
@@ -204,7 +200,7 @@
 
 			[self.purchases removeObjectForKey:token];
 
-			[self.queue finishTransaction:transaction];
+			[[SKPaymentQueue defaultQueue] finishTransaction:transaction];
 
 			// TODO: If something fails at this point the player will lose their purchase.
 
