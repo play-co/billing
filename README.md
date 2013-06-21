@@ -22,6 +22,14 @@ import plugins.billing.install;
 
 This installs a new global `billing` object accessible to all of your source.
 
+### iOS Setup
+
+For iOS you should ensure that your game's `manifest.json` has the correct "bundleID", "appleID", and "version" fields.
+
+The store item Product IDs must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
+
+All store items should be set up as Consumable.
+
 ## Handling Purchases
 
 In the JavaScript code for your game, you should write some code to handle in-app purchases.  After reading the previous state of the purchasable items from `localStorage`, your code should set up a `billing.onPurchase` handler:
