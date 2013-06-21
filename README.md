@@ -26,7 +26,7 @@ This installs a new global `billing` object accessible to all of your source.
 
 For iOS you should ensure that your game's `manifest.json` has the correct "bundleID", "appleID", and "version" fields.
 
-The store items must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
+The store item Product IDs must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
 
 All store items should be set up as Consumable.
 
