@@ -5,6 +5,7 @@
 
 @property (nonatomic, retain) SKPaymentQueue *queue;
 @property (nonatomic, retain) NSMutableDictionary *purchases;
+@property (nonatomic, retain) NSString *bundleID;
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions;
 
