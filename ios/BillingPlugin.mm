@@ -137,9 +137,13 @@
 }
 
 - (void) isConnected:(NSDictionary *)jsonObject {
+	BOOL isMarketAvailable = [SKPaymentQueue canMakePayments];
+
+	NSLog(@"{billing} Responded with Market Available: %@", isMarketAvailable ? @"YES" : @"NO");
+
 	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 										  @"billingConnected",@"name",
-										  ([SKPaymentQueue canMakePayments] ? kCFBooleanTrue : kCFBooleanFalse), @"connected",
+										  (isMarketAvailable ? kCFBooleanTrue : kCFBooleanFalse), @"connected",
 										  nil]];
 }
 
@@ -163,6 +167,8 @@
 												  @"not available",@"failure",
 												  nil]];
 		} else {
+			NSLog(@"{billing} Attempting to purchase item: %@", sku);
+
 			[self.queue addPayment:payment];
 		}
 	}
