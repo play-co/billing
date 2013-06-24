@@ -1,7 +1,7 @@
 #import "PluginManager.h"
 #import <StoreKit/StoreKit.h>
 
-@interface BillingPlugin : GCPlugin<SKPaymentTransactionObserver>
+@interface BillingPlugin : GCPlugin<SKPaymentTransactionObserver, SKProductsRequestDelegate>
 
 @property (nonatomic, retain) NSMutableDictionary *purchases;
 @property (nonatomic, retain) NSString *bundleID;

@@ -90,6 +90,27 @@
     [[SKPaymentQueue defaultQueue] finishTransaction: transaction];
 }
 
+- (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
+	NSLog(@"CAT: TESTING %@", [request debugDescription]);
+	NSLog(@"CAT: TESTING %@", [response debugDescription]);
+
+	NSArray *products = response.products;
+	if(products.count > 0) {
+		SKProduct *product = [products objectAtIndex:0];
+		
+		if(product) {
+			NSLog(@"Title: %@",       product.localizedTitle);
+			NSLog(@"Description: %@", product.localizedDescription);
+			NSLog(@"Price: %@",       product.price);
+			NSLog(@"Id: %@",          product.productIdentifier);
+		}
+	}
+	
+	for (NSString *invalidProductId in response.invalidProductIdentifiers) {
+		NSLog(@"Invalid Product: %@" , invalidProductId);
+	}
+}
+
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions {
 	for (SKPaymentTransaction *transaction in transactions) {
 		NSString *sku = transaction.payment.productIdentifier;
@@ -126,6 +147,13 @@
 		self.bundleID = bundleID;
 
 		NSLog(@"{billing} Initialized with manifest bundleID: '%@'", bundleID);
+		
+		[[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
+
+		NSSet *productIdentifiers = [NSSet setWithObject:@"com.tealeaf.seaotter.swords"];
+		SKProductsRequest *productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
+		productsRequest.delegate = self;
+		[productsRequest start];
 	}
 	@catch (NSException *exception) {
 		NSLog(@"{billing} Failure to get ios:bundleID from manifest file: %@", exception);
@@ -151,22 +179,15 @@
 
 		NSString *productId = [self.bundleID stringByAppendingFormat:@".%@", sku];
 
-		SKPayment *payment = [SKPayment paymentWithProductIdentifier:productId];
+		//SKPayment *payment = [SKPayment paymentWithProductIdentifier:productId];
 
-		if (!payment) {
-			NSLog(@"{billing} Failure purchasing unknown item: %@", productId);
+		SKMutablePayment *payment = [[SKMutablePayment alloc] init];
+        payment.productIdentifier = productId;
+        payment.quantity = 1;
 
-			[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
-												  @"billingPurchase",@"name",
-												  sku,@"sku",
-												  [NSNull null],@"token",
-												  @"not available",@"failure",
-												  nil]];
-		} else {
-			NSLog(@"{billing} Attempting to purchase item: %@", productId);
+		NSLog(@"{billing} Attempting to purchase item: %@", productId);
 
-			[[SKPaymentQueue defaultQueue] addPayment:payment];
-		}
+		[[SKPaymentQueue defaultQueue] addPayment:payment];
 	}
 	@catch (NSException *exception) {
 		NSLog(@"{billing} WARNING: Unable to purchase item: %@", exception);
