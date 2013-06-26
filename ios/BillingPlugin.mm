@@ -59,7 +59,7 @@
 	if ([sku hasPrefix:self.bundleID]) {
 		sku = [sku substringFromIndex:([self.bundleID length] + 1)];
 	}
-	
+
 	// Generate error code string
 	NSString *errorCode = @"failed";
 	switch (transaction.error.code) {
@@ -91,23 +91,43 @@
 }
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
-	NSLog(@"CAT: TESTING %@", [request debugDescription]);
-	NSLog(@"CAT: TESTING %@", [response debugDescription]);
+	NSLog(@"{billing} Got products response with %d hits and %d misses", (int)response.products.count, (int)response.invalidProductIdentifiers.count);
+
+	bool success = false;
+	NSString *sku = nil;
 
 	NSArray *products = response.products;
-	if(products.count > 0) {
+	if (products.count > 0) {
 		SKProduct *product = [products objectAtIndex:0];
-		
-		if(product) {
-			NSLog(@"Title: %@",       product.localizedTitle);
-			NSLog(@"Description: %@", product.localizedDescription);
-			NSLog(@"Price: %@",       product.price);
-			NSLog(@"Id: %@",          product.productIdentifier);
+
+		if (product) {
+			NSLog(@"{billing} Found product id=%@, title=%@", product.productIdentifier, product.localizedTitle);
+
+			SKPayment *payment =  [SKPayment paymentWithProduct:product];
+			[[SKPaymentQueue defaultQueue] addPayment:payment];
+
+			success = true;
 		}
 	}
-	
+
 	for (NSString *invalidProductId in response.invalidProductIdentifiers) {
-		NSLog(@"Invalid Product: %@" , invalidProductId);
+		NSLog(@"{billing} Unused product id: %@", invalidProductId);
+
+		sku = invalidProductId;
+	}
+
+	if (!success) {
+		// Strip bundleID prefix
+		if (sku != nil && [sku hasPrefix:self.bundleID]) {
+			sku = [sku substringFromIndex:([self.bundleID length] + 1)];
+		}
+
+		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+											  @"billingPurchase",@"name",
+											  (sku == nil ? [NSNull null] : sku),@"sku",
+											  [NSNull null],@"token",
+											  @"invalid product",@"failure",
+											  nil]];
 	}
 }
 
@@ -139,6 +159,22 @@
 	}
 }
 
+- (void) requestPurchase:(NSString *)productIdentifier {
+	// This is done exclusively to set up an SKPayment object with the result (it will initiate a purchase)
+
+	NSString *bundledProductId = [self.bundleID stringByAppendingFormat:@".%@", productIdentifier];
+
+	// Create a set with the given identifier
+	NSSet *productIdentifiers = [NSSet setWithObjects:productIdentifier,bundledProductId,nil];
+
+	// Create a products request
+	SKProductsRequest *productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
+	productsRequest.delegate = self;
+
+	// Kick it off!
+	[productsRequest start];
+}
+
 - (void) initializeWithManifest:(NSDictionary *)manifest appDelegate:(TeaLeafAppDelegate *)appDelegate {
 	@try {
 		NSDictionary *ios = [manifest valueForKey:@"ios"];
@@ -148,12 +184,6 @@
 
 		NSLog(@"{billing} Initialized with manifest bundleID: '%@'", bundleID);
 		
-		[[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
-
-		NSSet *productIdentifiers = [NSSet setWithObject:@"com.tealeaf.seaotter.swords"];
-		SKProductsRequest *productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
-		productsRequest.delegate = self;
-		[productsRequest start];
 	}
 	@catch (NSException *exception) {
 		NSLog(@"{billing} Failure to get ios:bundleID from manifest file: %@", exception);
@@ -177,17 +207,7 @@
 	@try {
 		sku = [jsonObject valueForKey:@"sku"];
 
-		NSString *productId = [self.bundleID stringByAppendingFormat:@".%@", sku];
-
-		//SKPayment *payment = [SKPayment paymentWithProductIdentifier:productId];
-
-		SKMutablePayment *payment = [[SKMutablePayment alloc] init];
-        payment.productIdentifier = productId;
-        payment.quantity = 1;
-
-		NSLog(@"{billing} Attempting to purchase item: %@", productId);
-
-		[[SKPaymentQueue defaultQueue] addPayment:payment];
+		[self requestPurchase:sku];
 	}
 	@catch (NSException *exception) {
 		NSLog(@"{billing} WARNING: Unable to purchase item: %@", exception);

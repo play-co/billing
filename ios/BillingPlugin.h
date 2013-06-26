@@ -8,6 +8,8 @@
 
 - (void) paymentQueue:(SKPaymentQueue *)queue updatedTransactions:(NSArray *)transactions;
 
+- (void) requestPurchase:(NSString *)productIdentifier;
+
 - (void) isConnected:(NSDictionary *)jsonObject;
 - (void) purchase:(NSDictionary *)jsonObject;
 - (void) consume:(NSDictionary *)jsonObject;
