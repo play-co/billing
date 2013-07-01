@@ -401,7 +401,7 @@ public class BillingPlugin implements IPlugin {
 	}
 
 	public boolean consumeOnBackPressed() {
-		return false;
+		return true;
 	}
 
 	public void onBackPressed() {
