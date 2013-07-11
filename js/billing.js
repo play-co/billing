@@ -208,7 +208,7 @@ var Billing = Class(Emitter, function (supr) {
 	this.purchase = simulatePurchase;
 });
 
-GLOBAL.billing = new Billing;
+var billing = new Billing;
 
 function onMarketStateChange() {
 	var available = isConnected && isOnline;
@@ -222,7 +222,7 @@ function onMarketStateChange() {
 			logger.log("Market is now unavailable");
 		}
 
-		GLOBAL.billing.emit("MarketAvailable", available);
+		billing.emit("MarketAvailable", available);
 	}
 }
 
@@ -378,7 +378,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		onMarketStateChange();
 	});
 
-	GLOBAL.billing.on("MarketAvailable", function(available) {
+	billing.on("MarketAvailable", function(available) {
 		// If just connected,
 		if (available) {
 			if (ownedRetryID !== null) {
@@ -397,3 +397,4 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 // Run initial state check
 onMarketStateChange();
 
+exports = billing;

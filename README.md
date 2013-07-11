@@ -14,13 +14,12 @@ Include it in the `manifest.json` file under the "addons" section for your game:
 ],
 ~~~
 
-At the top of your `src/Application.js` install the JS wrapper:
+You can import the billing object anywhere in your application:
 
 ~~~
-import plugins.billing.install;
+import plugins.billing.billing as billing;
 ~~~
 
-This installs a new global `billing` object accessible to all of your source.
 
 ### iOS Setup
 
