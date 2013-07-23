@@ -128,7 +128,7 @@ function EnablePurchaseEvents() {
 }
 ~~~
 
-# Global Object: billing
+# billing object
 
 ## Events
 
