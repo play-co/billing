@@ -83,8 +83,10 @@ public class BillingPlugin implements IPlugin {
 				if (responseCode.equals("SUCCESSFUL"))
 				{
 					Receipt receipt = purchaseResponse.getReceipt();
-					logger.log("{billing} Successfully purchased SKU:", receipt.getPurchaseToken());
-					EventQueue.pushEvent(new PurchaseEvent(receipt.getSku(), receipt.getPurchaseToken(), null));
+					String shortSKU = receipt.getSku();
+					shortSKU = shortSKU.substring(shortSKU.lastIndexOf(".")+1);
+					logger.log("{billing} Successfully purchased SKU: \""+ shortSKU+ " \"with token: " + receipt.getPurchaseToken());
+					EventQueue.pushEvent(new PurchaseEvent(shortSKU, receipt.getPurchaseToken(), null));
 				}
 				else if(responseCode.equals("ALREADY_ENTITLED"))
 				{
@@ -210,6 +212,7 @@ public class BillingPlugin implements IPlugin {
 		    	// Default Market selected as Google Play Store {defaults}
 		    	deviceIs = DeviceType.ANDROID;
 		    }
+		    deviceIs = DeviceType.KINDLE;
 		} catch (Exception e) {
 		    e.printStackTrace();
 		}		
@@ -264,11 +267,14 @@ public class BillingPlugin implements IPlugin {
 
 	public void purchaseForKindle(String jsonData) {
 		String sku = null;
+		String pkgName = _ctx.getPackageName();
 		logger.log("{billing} In transaction purchase for Amazon Kindle");
 		try {
 			JSONObject jsonObject = new JSONObject(jsonData);
 			sku = jsonObject.getString("sku");
-			String requestId = PurchasingManager.initiatePurchaseRequest(sku);
+			String fullSKU = pkgName+"."+sku;
+			logger.log("{billing} Doing Billing for sku: "+fullSKU);
+			String requestId = PurchasingManager.initiatePurchaseRequest(fullSKU);
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in purchase:", e);
 			e.printStackTrace();
