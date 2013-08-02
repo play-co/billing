@@ -216,7 +216,7 @@ public class BillingPlugin implements IPlugin {
 		switch(deviceIs)
 		{
 			case KINDLE:
-						logger.log("{billing} Switched to KINDLE");
+						logger.log("{billing} Switched to KINDLE ");
 						try {
 							PurchasingManager.registerObserver(new MyObserver(_activity));
 						} catch (Exception e) {
