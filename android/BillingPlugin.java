@@ -212,7 +212,7 @@ public class BillingPlugin implements IPlugin {
 		    	// Default Market selected as Google Play Store {defaults}
 		    	deviceIs = DeviceType.ANDROID;
 		    }
-		    deviceIs = DeviceType.KINDLE;
+		    //deviceIs = DeviceType.KINDLE; //This line can be uncommented to hardcode any android device to a specific store
 		} catch (Exception e) {
 		    e.printStackTrace();
 		}		
