@@ -64,7 +64,7 @@ with the normal HTML5 localStorage API as shown above.
 
 ## Handling Purchase Failures
 
-When purchases fail, the failure may be handled with the `billing.onPurchaseFail` callback:
+When purchases fail, the failure may be handled with the `billing.onFailure` callback:
 
 ~~~
 function handleFailure(reason, item) {
