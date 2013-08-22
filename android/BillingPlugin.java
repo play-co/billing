@@ -1,4 +1,5 @@
 package com.tealeaf.plugin.plugins;
+
 import java.util.Map;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -15,6 +16,8 @@ import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.Iterator;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 
 import com.tealeaf.plugin.IPlugin;
 import android.app.Activity;
@@ -29,19 +32,83 @@ import android.util.Log;
 import android.content.ComponentName;
 import android.os.IBinder;
 import android.app.PendingIntent;
+import android.os.Build;
 
 import com.tealeaf.EventQueue;
 import com.tealeaf.event.*;
 
 import com.android.vending.billing.IInAppBillingService;
 
+import com.amazon.inapp.purchasing.BasePurchasingObserver;
+import com.amazon.inapp.purchasing.PurchasingManager;
+import com.amazon.inapp.purchasing.ItemDataResponse;
+import com.amazon.inapp.purchasing.PurchaseResponse;
+import com.amazon.inapp.purchasing.Receipt;
+
 public class BillingPlugin implements IPlugin {
 	Context _ctx = null;
 	Activity _activity = null;
 	IInAppBillingService mService = null;
 	ServiceConnection mServiceConn = null;
+	public enum DeviceType {
+    	KINDLE, ANDROID
+	}
+	private DeviceType deviceIs = DeviceType.ANDROID;
 	Object mServiceLock = new Object();
 	static private final int BUY_REQUEST_CODE = 123450;
+	
+	private class MyObserver extends BasePurchasingObserver {
+
+		public MyObserver(Activity _activity) {
+		    super(_activity);	 
+		}
+
+		@Override
+		public void onItemDataResponse(ItemDataResponse itemDataResponse) {
+
+		    //Check itemDataResponse.getItemDataRequestStatus();
+		    //Use itemDataResponse to populate catalog data
+
+		}
+
+		@Override
+		public void onPurchaseResponse(PurchaseResponse purchaseResponse) {
+
+		    //Check purchaseResponse.getPurchaseRequestStatus();
+		    //If SUCCESSFUL, fulfill content;
+		    logger.log("{billing} Entering Amazon Kindle Billing Plugin Handler");
+			try {
+				String responseCode = purchaseResponse.getPurchaseRequestStatus().toString();
+				if (responseCode.equals("SUCCESSFUL"))
+				{
+					Receipt receipt = purchaseResponse.getReceipt();
+					String shortSKU = receipt.getSku();
+					shortSKU = shortSKU.substring(shortSKU.lastIndexOf(".")+1);
+					logger.log("{billing} Successfully purchased SKU: \""+ shortSKU+ " \"with token: " + receipt.getPurchaseToken());
+					EventQueue.pushEvent(new PurchaseEvent(shortSKU, receipt.getPurchaseToken(), null));
+				}
+				else if(responseCode.equals("ALREADY_ENTITLED"))
+				{
+					logger.log("{billing} WARNING: Already Entitled to the Goods with response code:", responseCode);
+					EventQueue.pushEvent(new PurchaseEvent(null, null, responseCode));					
+				}
+				else if(responseCode.equals("INVALID_SKU"))
+				{
+					logger.log("{billing} WARNING: Ignored null purchase data with response code:", responseCode);
+					EventQueue.pushEvent(new PurchaseEvent(null, null, responseCode));					
+				}				
+				else
+				{
+					logger.log("{billing} WARNING: Ignored null purchase data with response code:", responseCode);
+					EventQueue.pushEvent(new PurchaseEvent(null, null, responseCode));					
+				}
+			} catch (Exception e) {
+				logger.log("{billing} WARNING: Failed to parse purchase data:", e);
+				e.printStackTrace();
+				EventQueue.pushEvent(new PurchaseEvent(null, null, "failed"));
+			}
+		}
+	} 
 
 	public class PurchaseEvent extends com.tealeaf.event.Event {
 		String sku, token, failure;
@@ -127,6 +194,52 @@ public class BillingPlugin implements IPlugin {
 	}
 
 	public void onStart() {
+		final PackageManager packageManager = _ctx.getPackageManager();
+
+		try {
+		    final ApplicationInfo applicationInfo = packageManager.getApplicationInfo(_ctx.getPackageName(), 0);
+		    if ("com.amazon.venezia".equals(packageManager.getInstallerPackageName(applicationInfo.packageName))) {
+		        // App was installed by Amazon App Store
+		        deviceIs = DeviceType.KINDLE;
+		    }
+		    else if("com.android.vending".equals(packageManager.getInstallerPackageName(applicationInfo.packageName))) {
+		    	// App was installed by Google Play Store
+		        deviceIs = DeviceType.ANDROID;
+		    }
+		    else
+		    {
+		    	// Default Market selected as Google Play Store {defaults}
+		    	deviceIs = DeviceType.ANDROID;
+		    }
+		    //deviceIs = DeviceType.KINDLE; //This line can be uncommented to hardcode any android device to a specific store
+		} catch (Exception e) {
+		    e.printStackTrace();
+		}		
+		switch(deviceIs)
+		{
+			case KINDLE:
+						logger.log("{billing} Switched to KINDLE ");
+						try {
+							PurchasingManager.registerObserver(new MyObserver(_activity));
+						} catch (Exception e) {
+							logger.log("{billing} WARNING: Failure in purchase init:", e);
+							e.printStackTrace();
+							StringWriter writer = new StringWriter();
+							PrintWriter printWriter = new PrintWriter( writer );
+							e.printStackTrace( printWriter );
+							printWriter.flush();
+							String stackTrace = writer.toString();
+							logger.log("{billing} onstart stackTrace: "+stackTrace);
+						}
+						break;
+			case ANDROID: 
+						logger.log("{billing} Switched to ANDROID");
+			            break;
+			default: 
+						logger.log("{billing} Switched to ANDROID BY DEFAULT");
+			            deviceIs = DeviceType.ANDROID;
+					 	break;
+		}
 	}
 
 	public void onPause() {
@@ -151,7 +264,30 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	public void purchaseForKindle(String jsonData) {
+		String sku = null;
+		String pkgName = _ctx.getPackageName();
+		logger.log("{billing} In transaction purchase for Amazon Kindle");
+		try {
+			JSONObject jsonObject = new JSONObject(jsonData);
+			sku = jsonObject.getString("sku");
+			String fullSKU = pkgName+"."+sku;
+			logger.log("{billing} Doing Billing for sku: "+fullSKU);
+			String requestId = PurchasingManager.initiatePurchaseRequest(fullSKU);
+		} catch (Exception e) {
+			logger.log("{billing} WARNING: Failure in purchase:", e);
+			e.printStackTrace();
+			EventQueue.pushEvent(new PurchaseEvent(sku, null, "failed"));
+		}
+	}
+	
 	public void purchase(String jsonData) {
+		if(deviceIs == DeviceType.KINDLE)
+		{
+			logger.log("{billing} Initiating purchase for Amazon Kindle");
+			purchaseForKindle(jsonData);
+			return;
+		}
 		boolean success = false;
 		String sku = null;
 
@@ -208,6 +344,14 @@ public class BillingPlugin implements IPlugin {
 			final String TOKEN = jsonObject.getString("token");
 			token = TOKEN;
 
+			if(deviceIs == DeviceType.KINDLE)
+			{
+				logger.log("{billing} Consuming:", TOKEN);
+				logger.log("{billing} Consume suceeded:", TOKEN);
+				EventQueue.pushEvent(new ConsumeEvent(TOKEN, null));
+				return;
+			}
+
 			synchronized (mServiceLock) {
 				if (mService == null) {
 					EventQueue.pushEvent(new ConsumeEvent(TOKEN, "service"));
@@ -258,7 +402,7 @@ public class BillingPlugin implements IPlugin {
 		ArrayList<String> skus = new ArrayList<String>();
 		ArrayList<String> tokens = new ArrayList<String>();
 		boolean success = false;
-
+		logger.log("{billing}=======getPurchase: "+jsonData);
 		try {
 			logger.log("{billing} Getting prior purchases");
 
@@ -295,7 +439,7 @@ public class BillingPlugin implements IPlugin {
 
 					JSONObject json = new JSONObject(purchaseData);
 					String token = json.getString("purchaseToken");
-
+					logger.log("{billing}====== token: "+token);
 					// TODO: Provide purchase data
 					// TODO: Verify signatures
 
@@ -361,7 +505,7 @@ public class BillingPlugin implements IPlugin {
 				} else {
 					JSONObject jo = new JSONObject(purchaseData);
 					sku = jo.getString("productId");
-
+					logger.log("{billing}==========onReturn: "+jo.toString());
 					if (sku == null) {
 						logger.log("{billing} WARNING: Malformed purchase json");
 					} else {
@@ -406,4 +550,3 @@ public class BillingPlugin implements IPlugin {
 	public void onBackPressed() {
 	}
 }
-

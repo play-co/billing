@@ -20,6 +20,19 @@ You can import the billing object anywhere in your application:
 import plugins.billing.billing as billing;
 ~~~
 
+### Amazon App Store Setup
+
+For Amazon you need to remember one thing specifically, that the SKU you set up in the amazon website should have your package name in it and when trying to purchase something you should just give the name of the object you intend to buy. The package name is added automatically by the plugin.
+
+Eg:
+
+If your item is Gold1 then you should set SKU something like com.gameclosure.platformer.gold1
+
+But when you make a call to the plugin it should just be gold1
+
+Next you need to setup IAP on your phone by following this guide from Amazon 
+https://developer.amazon.com/sdk/in-app-purchasing/documentation/testing-iap.html
+
 
 ### iOS Setup
 
