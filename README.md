@@ -29,6 +29,8 @@ The store item Product IDs must be prefixed with your bundleID (as in "com.games
 
 All store items should be set up as Consumable.
 
+After building your game, you will need to turn on the IAP entitlement.  This can be done by selecting your project, choosing the "Capabilities" tab, and turning on the In-App Purchase entitlement.  You will be prompted to log in to your development team.
+
 ## Handling Purchases
 
 In the JavaScript code for your game, you should write some code to handle in-app purchases.  After reading the previous state of the purchasable items from `localStorage`, your code should set up a `billing.onPurchase` handler:
