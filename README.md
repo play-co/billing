@@ -27,8 +27,6 @@ For iOS you should ensure that your game's `manifest.json` has the correct "bund
 
 The store item Product IDs must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
 
-To be accepted on the iOS app store you must have a [Restore Purchases] button.  See the `Restoring Purchases` section below for details.
-
 After building your game, you will need to turn on the IAP entitlement.  This can be done by selecting your project, choosing the "Capabilities" tab, and turning on the In-App Purchase entitlement.  You will be prompted to log in to your development team.
 
 ## Handling Purchases
@@ -130,26 +128,6 @@ function EnablePurchaseEvents() {
 }
 ~~~
 
-## Restoring Purchases
-
-In order to ship an app with in-app purchases on the iOS App Store, you are required to include a [Restore Purchases] button, which must query the App Store for past purchases made from the same Apple ID and restore them in the game.  The way to implement this button is by using the `billing.restore` function.
-
-~~~
-billing.restore(function(err) {
-	if (err) {
-		logger.log("Unable to restore purchases:", err);
-	} else {
-		logger.log("Finished restoring purchases!");
-	}
-});
-~~~
-
-Your `billing.onPurchase` callback will receive all of the old items while restoring.
-
-Finally, the provided callback will be called, letting you know when the restoration completes, or if the restoration failed and why.
-
-If an in-game button press triggers `billing.restore` then the button should be disabled until the result comes back to your callback.
-
 # billing object
 
 ## Events
@@ -241,32 +219,6 @@ If the purchase succeeds, then the `billing.onPurchase` callback you set will be
 ~~~
 billing.purchase("fiveCoins");
 ~~~
-
-### billing.restore ([callback])
-
-Parameters
-:	1. `[callback {function}]` ---Optional callback.
-
-Returns
-:    1. `void`
-
-Initiate restoring old purchases.  These will only restore "managed" purchases set up for your application that are tracked by the app store servers.  Consumable purchases will be lost if local storage is wiped for any reason.
-
-Your `billing.onPurchase` callback will be called for each old purchase.
-
-When restoration completes, the optional callback provided to `billing.restore` will be invoked.
-
-~~~
-billing.restore(function(err) {
-	if (err) {
-		logger.log("Unable to restore purchases:", err);
-	} else {
-		logger.log("Finished restoring purchases!");
-	}
-});
-~~~
-
-See the guide section above on `Restoring Purchases` for more information.
 
 ##### Simulation Mode
 
