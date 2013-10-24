@@ -311,12 +311,12 @@
 										  nil]];
 }
 
-- (void) restoreOld:(NSDictionary *)jsonObject {
+- (void) restoreCompleted:(NSDictionary *)jsonObject {
 	// Send the list of purchases that may have been missed by the JavaScript during startup
 	@try {
 		[[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 
-		NSLog(@"{billing} Restoring old transactions");
+		NSLog(@"{billing} Restoring completed transactions");
 	}
 	@catch (NSException *exception) {
 		NSLog(@"{billing} WARNING: Unable to restore completed: %@", exception);
@@ -328,4 +328,3 @@
 }
 
 @end
-

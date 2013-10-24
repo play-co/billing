@@ -153,9 +153,6 @@ var itemToken = {};
 // Flag: Has read purchases from the market?
 var readPurchases = false;
 
-// Flag: Has restore purchases completed?
-var restoredPurchases = false;
-
 // Flag: Is market service connected?
 var isConnected = true;
 
@@ -266,21 +263,19 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	};
 
+	var onRestore;
+
+	Billing.prototype.restore = function(cb) {
+		NATIVE.plugins.sendEvent("BillingPlugin", "restoreCompleted", "{}");
+
+		onRestore = cb;
+	}
+
 	NATIVE.events.registerHandler('billingRestore', function(evt) {
 		logger.log("Got billingRestore event:", JSON.stringify(evt));
 
-		if (!restoredPurchases) {
-			if (evt.failure) {
-				setTimeout(function() {
-					if (!restoredPurchases) {
-						NATIVE.plugins.sendEvent("BillingPlugin", "restoreOld", "{}");
-					}
-				}, 10000);
-			} else {
-				logger.log("Restored old purchases");
-
-				restoredPurchases = true;
-			}
+		if (typeof onRestore == "function") {
+			onRestore(evt.failure);
 		}
 	});
 
@@ -411,10 +406,6 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			if (!readPurchases) {
 				NATIVE.plugins.sendEvent("BillingPlugin", "getPurchases", "{}");
 			}
-
-			if (!restoredPurchases) {
-				NATIVE.plugins.sendEvent("BillingPlugin", "restoreOld", "{}");
-			}
 		}
 	});
 }
@@ -423,4 +414,3 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 onMarketStateChange();
 
 exports = billing;
-
