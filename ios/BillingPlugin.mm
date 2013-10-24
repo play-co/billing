@@ -142,8 +142,8 @@
 				[self completeTransaction:transaction];
 				break;
 			case SKPaymentTransactionStateRestored:
-				NSLog(@"{billing} Ignoring restored transaction for sku=%@ and token=%@", sku, token);
-				[[SKPaymentQueue defaultQueue] finishTransaction: transaction];
+				NSLog(@"{billing} Restoring transaction for sku=%@ and token=%@", sku, token);
+				[self completeTransaction:transaction];
 				break;
 			case SKPaymentTransactionStatePurchasing:
 				NSLog(@"{billing} Transaction purchasing for sku=%@ and token=%@", sku, token);
