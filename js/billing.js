@@ -263,6 +263,22 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 		}
 	};
 
+	var onRestore;
+
+	Billing.prototype.restore = function(cb) {
+		NATIVE.plugins.sendEvent("BillingPlugin", "restoreCompleted", "{}");
+
+		onRestore = cb;
+	}
+
+	NATIVE.events.registerHandler('billingRestore', function(evt) {
+		logger.log("Got billingRestore event:", JSON.stringify(evt));
+
+		if (typeof onRestore == "function") {
+			onRestore(evt.failure);
+		}
+	});
+
 	// Request initial market state
 	NATIVE.plugins.sendEvent("BillingPlugin", "isConnected", "{}");
 

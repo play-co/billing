@@ -297,4 +297,34 @@
 	}
 }
 
+- (void)paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
+	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+										  @"billingRestore",@"name",
+										  error,@"failure",
+										  nil]];
+}
+
+- (void)paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
+	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+										  @"billingRestore",@"name",
+										  [NSNull null],@"failure",
+										  nil]];
+}
+
+- (void) restoreCompleted:(NSDictionary *)jsonObject {
+	// Send the list of purchases that may have been missed by the JavaScript during startup
+	@try {
+		[[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
+
+		NSLog(@"{billing} Restoring completed transactions");
+	}
+	@catch (NSException *exception) {
+		NSLog(@"{billing} WARNING: Unable to restore completed: %@", exception);
+		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+											  @"billingRestore",@"name",
+											  exception,@"failure",
+											  nil]];
+	}
+}
+
 @end
