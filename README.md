@@ -62,6 +62,8 @@ After a player successfully purchases an item, it is a good idea to store it in
 offline local storage to persist between runs of the game.  This can be done
 with the normal HTML5 localStorage API as shown above.
 
+Consumable purchases must be tracked by your own application.  Managed purchases can be tracked by the App Store.  On startup, any managed purchases will be restored and delivered to your `billing.onPurchase` callback.  Note that this will not happen if the App Store is unavailable, so even managed purchases should be tracked in local storage just like consumable purchases.  If you are tracking managed purchases in your local storage data, be aware that the `billing.onPurchase` callback will likely be called with that item again the next time your app restarts and avoid double-crediting the player.
+
 ## Handling Purchase Failures
 
 When purchases fail, the failure may be handled with the `billing.onFailure` callback:
