@@ -61,7 +61,11 @@ function purchasedItem(item) {
 function creditConsumedItem(item) {
 	try {
 		if (typeof onPurchase === "function" && consumedItems[item]) {
-			onPurchase(item);
+			try {
+				onPurchase(item);
+			} catch(e) {
+				logger.log("onPurchase CALLBACK FAILURE!")
+			}
 
 			delete consumedItems[item];
 			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
