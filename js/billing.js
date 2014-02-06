@@ -372,7 +372,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			var tokens = evt.tokens;
 			if (skus && skus.length > 0) {
 				for (var ii = 0, len = skus.length; ii < len; ++ii) {
-					nativePurchasedItem(sku[ii], tokens[ii]);
+					nativePurchasedItem(skus[ii], tokens[ii]);
 				}
 			}
 		}
