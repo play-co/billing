@@ -1,4 +1,5 @@
 #import "BillingPlugin.h"
+#import "platform/log.h"
 
 // TODO: Verify store receipt for security
 
@@ -33,7 +34,7 @@
 	NSString *token = transaction.transactionIdentifier;
 
 	if ([self.purchases objectForKey:token] != nil) {
-		NSLog(@"{billing} WARNING: Strangeness is afoot.  The same purchase token was specified twice");
+		NSLOG(@"{billing} WARNING: Strangeness is afoot.  The same purchase token was specified twice");
 	}
 
 	// Remember transaction so that it can be consumed later
@@ -91,7 +92,7 @@
 }
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
-	NSLog(@"{billing} Got products response with %d hits and %d misses", (int)response.products.count, (int)response.invalidProductIdentifiers.count);
+	NSLOG(@"{billing} Got products response with %d hits and %d misses", (int)response.products.count, (int)response.invalidProductIdentifiers.count);
 
 	bool success = false;
 	NSString *sku = nil;
@@ -101,7 +102,7 @@
 		SKProduct *product = [products objectAtIndex:0];
 
 		if (product) {
-			NSLog(@"{billing} Found product id=%@, title=%@", product.productIdentifier, product.localizedTitle);
+			NSLOG(@"{billing} Found product id=%@, title=%@", product.productIdentifier, product.localizedTitle);
 
 			SKPayment *payment =  [SKPayment paymentWithProduct:product];
 			[[SKPaymentQueue defaultQueue] addPayment:payment];
@@ -111,7 +112,7 @@
 	}
 
 	for (NSString *invalidProductId in response.invalidProductIdentifiers) {
-		NSLog(@"{billing} Unused product id: %@", invalidProductId);
+		NSLOG(@"{billing} Unused product id: %@", invalidProductId);
 
 		sku = invalidProductId;
 	}
@@ -138,22 +139,22 @@
 
 		switch (transaction.transactionState) {
 			case SKPaymentTransactionStatePurchased:
-				NSLog(@"{billing} Transaction completed purchase for sku=%@ and token=%@", sku, token);
+				NSLOG(@"{billing} Transaction completed purchase for sku=%@ and token=%@", sku, token);
 				[self completeTransaction:transaction];
 				break;
 			case SKPaymentTransactionStateRestored:
-				NSLog(@"{billing} Restoring transaction for sku=%@ and token=%@", sku, token);
+				NSLOG(@"{billing} Restoring transaction for sku=%@ and token=%@", sku, token);
 				[self completeTransaction:transaction];
 				break;
 			case SKPaymentTransactionStatePurchasing:
-				NSLog(@"{billing} Transaction purchasing for sku=%@ and token=%@", sku, token);
+				NSLOG(@"{billing} Transaction purchasing for sku=%@ and token=%@", sku, token);
 				break;
 			case SKPaymentTransactionStateFailed:
-				NSLog(@"{billing} Transaction failed with error code %d(%@) for sku=%@ and token=%@", (int)transaction.error.code, transaction.error.localizedDescription, sku, token);
+				NSLOG(@"{billing} Transaction failed with error code %d(%@) for sku=%@ and token=%@", (int)transaction.error.code, transaction.error.localizedDescription, sku, token);
 				[self failedTransaction:transaction];
 				break;
 			default:
-				NSLog(@"{billing} Ignoring unknown transaction state %d: error=%d for sku=%@ and token=%@", transaction.transactionState, (int)transaction.error.code, sku, token);
+				NSLOG(@"{billing} Ignoring unknown transaction state %d: error=%d for sku=%@ and token=%@", transaction.transactionState, (int)transaction.error.code, sku, token);
 				break;
 		}
 	}
@@ -182,18 +183,18 @@
 
 		self.bundleID = bundleID;
 
-		NSLog(@"{billing} Initialized with manifest bundleID: '%@'", bundleID);
+		NSLOG(@"{billing} Initialized with manifest bundleID: '%@'", bundleID);
 		
 	}
 	@catch (NSException *exception) {
-		NSLog(@"{billing} Failure to get ios:bundleID from manifest file: %@", exception);
+		NSLOG(@"{billing} Failure to get ios:bundleID from manifest file: %@", exception);
 	}
 }
 
 - (void) isConnected:(NSDictionary *)jsonObject {
 	BOOL isMarketAvailable = [SKPaymentQueue canMakePayments];
 
-	NSLog(@"{billing} Responded with Market Available: %@", isMarketAvailable ? @"YES" : @"NO");
+	NSLOG(@"{billing} Responded with Market Available: %@", isMarketAvailable ? @"YES" : @"NO");
 
 	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 										  @"billingConnected",@"name",
@@ -210,7 +211,7 @@
 		[self requestPurchase:sku];
 	}
 	@catch (NSException *exception) {
-		NSLog(@"{billing} WARNING: Unable to purchase item: %@", exception);
+		NSLOG(@"{billing} WARNING: Unable to purchase item: %@", exception);
 
 		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 											  @"billingPurchase",@"name",
@@ -229,7 +230,7 @@
 
 		SKPaymentTransaction *transaction = [self.purchases valueForKey:token];
 		if (!transaction) {
-			NSLog(@"{billing} Failure consuming item with unknown token: %@", token);
+			NSLOG(@"{billing} Failure consuming item with unknown token: %@", token);
 
 			[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 												  @"billingConsume",@"name",
@@ -237,7 +238,7 @@
 												  @"already consumed",@"failure",
 												  nil]];
 		} else {
-			NSLog(@"{billing} Consuming: %@", token);
+			NSLOG(@"{billing} Consuming: %@", token);
 
 			[self.purchases removeObjectForKey:token];
 
@@ -253,7 +254,7 @@
 		}
 	}
 	@catch (NSException *exception) {
-		NSLog(@"{billing} WARNING: Unable to consume item: %@", exception);
+		NSLOG(@"{billing} WARNING: Unable to consume item: %@", exception);
 
 		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 											  @"billingConsume",@"name",
@@ -277,7 +278,7 @@
 			[tokens addObject:token];
 		}
 
-		NSLog(@"{billing} Notifying wrapper of %d existing purchases", (int)[skus count]);
+		NSLOG(@"{billing} Notifying wrapper of %d existing purchases", (int)[skus count]);
 
 		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 											  @"billingOwned",@"name",
@@ -287,7 +288,7 @@
 											  nil]];
 	}
 	@catch (NSException *exception) {
-		NSLog(@"{billing} WARNING: Unable to get purchases: %@", exception);
+		NSLOG(@"{billing} WARNING: Unable to get purchases: %@", exception);
 		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 											  @"billingOwned",@"name",
 											  [NSNull null],@"skus",
@@ -316,10 +317,10 @@
 	@try {
 		[[SKPaymentQueue defaultQueue] restoreCompletedTransactions];
 
-		NSLog(@"{billing} Restoring completed transactions");
+		NSLOG(@"{billing} Restoring completed transactions");
 	}
 	@catch (NSException *exception) {
-		NSLog(@"{billing} WARNING: Unable to restore completed: %@", exception);
+		NSLOG(@"{billing} WARNING: Unable to restore completed: %@", exception);
 		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 											  @"billingRestore",@"name",
 											  exception,@"failure",
