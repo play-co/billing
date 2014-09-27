@@ -231,7 +231,7 @@ function onMarketStateChange() {
 }
 
 // If just simulating native device,
-if (!GLOBAL.NATIVE || device.isSimulator) {
+if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing fake billing API");
 } else {
 	logger.log("Installing JS billing component for native");
