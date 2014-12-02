@@ -119,7 +119,7 @@
 
 	if (!success) {
 		// Strip bundleID prefix
-		if (sku != nil && [sku hasPrefix:self.bundleID]) {
+		if (sku != nil && self.bundleID && [sku hasPrefix:self.bundleID]) {
 			sku = [sku substringFromIndex:([self.bundleID length] + 1)];
 		}
 
