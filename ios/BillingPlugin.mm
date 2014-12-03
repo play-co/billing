@@ -32,6 +32,11 @@
 - (void) completeTransaction:(SKPaymentTransaction *)transaction {
 	NSString *sku = transaction.payment.productIdentifier;
 	NSString *token = transaction.transactionIdentifier;
+	NSData *receipt = transaction.transactionReceipt;
+	NSString *signature = nil;
+	if (receipt) {
+		signature = [receipt base64EncodedString];
+	}
 
 	if ([self.purchases objectForKey:token] != nil) {
 		NSLOG(@"{billing} WARNING: Strangeness is afoot.  The same purchase token was specified twice");
@@ -49,6 +54,7 @@
 										  @"billingPurchase",@"name",
 										  sku, @"sku",
 										  token, @"token",
+										  signature, @"signature",
 										  [NSNull null], @"failure",
 										  nil]];
 }
@@ -269,13 +275,20 @@
 	@try {
 		NSMutableArray *skus = [NSMutableArray array];
 		NSMutableArray *tokens = [NSMutableArray array];
+		NSMutableArray *signatures = [NSMutableArray array];
 
 		for (NSString *token in self.purchases) {
 			SKPaymentTransaction *transaction = [self.purchases objectForKey:token];
 			NSString *sku = transaction.payment.productIdentifier;
+			NSData *receipt = transaction.transactionReceipt;
+			NSString *signature = nil;
+			if (receipt) {
+				signature = [receipt base64EncodedString];
+			}
 
 			[skus addObject:sku];
 			[tokens addObject:token];
+			[signatures addObject:signature];
 		}
 
 		NSLOG(@"{billing} Notifying wrapper of %d existing purchases", (int)[skus count]);
@@ -284,6 +297,7 @@
 											  @"billingOwned",@"name",
 											  skus,@"skus",
 											  tokens,@"tokens",
+											  signatures,@"signatures",
 											  [NSNull null],@"failure",
 											  nil]];
 	}
