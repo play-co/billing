@@ -270,9 +270,9 @@
 		NSMutableArray *skus = [NSMutableArray array];
 		NSMutableArray *tokens = [NSMutableArray array];
 
-		for (SKPaymentTransaction *transaction in self.purchases) {
+		for (NSString *token in self.purchases) {
+			SKPaymentTransaction *transaction = [self.purchases objectForKey:token];
 			NSString *sku = transaction.payment.productIdentifier;
-			NSString *token = transaction.transactionIdentifier;
 
 			[skus addObject:sku];
 			[tokens addObject:token];
