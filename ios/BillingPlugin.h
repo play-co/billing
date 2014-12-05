@@ -1,4 +1,5 @@
 #import "PluginManager.h"
+#import "NSData+Base64.h"
 #import <StoreKit/StoreKit.h>
 
 @interface BillingPlugin : GCPlugin<SKPaymentTransactionObserver, SKProductsRequestDelegate>

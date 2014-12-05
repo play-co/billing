@@ -67,6 +67,13 @@ function creditConsumedItem(item) {
 				logger.log("onPurchase CALLBACK FAILURE!")
 			}
 
+			// emit purchaseWithReceipt event
+			if (itemSignature[item]) {
+				billing.emit('purchaseWithReceipt', {
+					sku: item,
+					signature: itemSignature[item]
+				});
+			}
 			delete consumedItems[item];
 			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
 
@@ -153,6 +160,7 @@ initializeFromLocalStorage();
 // Maps of tokens <-> items from market
 var tokenItem = {};
 var itemToken = {};
+var itemSignature = {};
 
 // Flag: Has read purchases from the market?
 var readPurchases = false;
@@ -231,7 +239,7 @@ function onMarketStateChange() {
 }
 
 // If just simulating native device,
-if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
+if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing fake billing API");
 } else {
 	logger.log("Installing JS billing component for native");
@@ -286,10 +294,11 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 	// Request initial market state
 	NATIVE.plugins.sendEvent("BillingPlugin", "isConnected", "{}");
 
-	function nativePurchasedItem(sku, token) {
+	function nativePurchasedItem(sku, token, signature) {
 		// Set up map
 		tokenItem[token] = sku;
 		itemToken[sku] = token;
+		itemSignature[sku] = signature;
 
 		// Record purchases
 		purchasedItem(sku);
@@ -314,7 +323,7 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 				onFailure(failure, sku);
 			}
 		} else {
-			nativePurchasedItem(sku, evt.token);
+			nativePurchasedItem(sku, evt.token, evt.signature);
 		}
 	});
 
@@ -370,9 +379,10 @@ if (!GLOBAL.NATIVE || device.simulatingMobileNative) {
 			// Add owned items
 			var skus = evt.skus;
 			var tokens = evt.tokens;
+			var signatures = evt.signatures || [];
 			if (skus && skus.length > 0) {
 				for (var ii = 0, len = skus.length; ii < len; ++ii) {
-					nativePurchasedItem(skus[ii], tokens[ii]);
+					nativePurchasedItem(skus[ii], tokens[ii], signatures[ii]);
 				}
 			}
 		}

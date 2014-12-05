@@ -1,23 +1,23 @@
-# Game Closure DevKit Plugin: Billing
+# Game Closure DevKit Plugin : Billing
 
-The billing plugin supports in-app purchases from the Google Play Store on Android, and from the Apple App Store on iOS, through one simple unified API.
+The billing plugin supports in-app purchases from the Google Play Store on
+Android, and from the Apple App Store on iOS, through one simple unified API.
+
+## Demo
+Check out [the demo application](https://github.com/gameclosure/demoBilling) for
+a working example of the various billing features.
 
 ## Installation
-
-Install the billing plugin by running `basil install billing`.
-
-Include it in the `manifest.json` file under the "addons" section for your game:
+Install the billing module using the standard devkit install process:
 
 ~~~
-"addons": [
-	"billing"
-],
+devkit install https://github.com/gameclosure/billing#v2.0.0
 ~~~
 
-You can import the billing object anywhere in your application:
+You can now import the billing object anywhere in your application:
 
 ~~~
-import plugins.billing.billing as billing;
+import billing;
 ~~~
 
 
@@ -30,6 +30,18 @@ The store item Product IDs must be prefixed with your bundleID (as in "com.games
 If any of your in-app purchases are managed instead of consumable then you will need to make additional changes.  To be accepted on the iOS app store you must have a [Restore Purchases] button.  See the `Restoring Purchases` section below for details.
 
 After building your game, you will need to turn on the IAP entitlement.  This can be done by selecting your project, choosing the "Capabilities" tab, and turning on the In-App Purchase entitlement.  You will be prompted to log in to your development team.
+
+
+### Android - Google Play Store Setup
+
+For the play store you should ensure your game is published (it can be published
+in the alpha or beta channels and not show up on the app store) and includes in
+app purchases. You'll need to add test email addresses to your play store
+account if you want to use test transactions instead of real transactions.
+
+Your in app purchase names should match the item names you use in your
+javascript code.
+
 
 ## Handling Purchases
 
@@ -66,6 +78,7 @@ with the normal HTML5 localStorage API as shown above.
 
 Consumable purchases must be tracked by your own application.  Managed purchases can be tracked by the App Store, but will require you to implement a Restore Purchases button in your app.  If you are tracking managed purchases in your local storage data, be aware that the `billing.onPurchase` callback will likely be called with that item again while restoring purchases, so you will need to avoid double-crediting the player.
 
+
 ## Handling Purchase Failures
 
 When purchases fail, the failure may be handled with the `billing.onFailure` callback:
@@ -85,6 +98,47 @@ billing.onFailure = handleFailure;
 Handling these failures is *optional*.
 
 One way to respond is to pop up a modal dialog that says "please check that Airplane mode is disabled and try again later."  It may also be interesting to do some analytics on how often users cancel purchases or fail to make purchases.
+
+## Handling Purchase Validation
+
+Additionally, the billing plugin also emits a `purchaseWithReceipt` event when a
+transaction is completed and it has been signed by the store from which it was
+sent. The event includes an `sku` property that matches the item name sent to
+the purchase method and a `signature` property.
+
+On iOS this is a base 64 encoded string from the [transactionReceipt](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentTransaction_Class/index.html#//apple_ref/occ/instp/SKPaymentTransaction/transactionReceipt)
+NSData (deprecated in iOS 7 but still remains the standard for most analytics platforms
+and is the only way to support older devices). On Android, this is the value in
+the `INAPP_DATA_SIGNATURE` string on the purchase activity data. More info in
+[the
+docs](http://developer.android.com/google/play/billing/billing_integrate.html#Purchase).
+
+You can listen for the `purchaseWithReceipt` event and pass it on to your own
+external server for validation or send it to an analytics platform that supports
+validating purchases. Here is an example from the demoBilling app which then
+passes the signature data on to the amplitude module.
+
+~~~
+
+  // listen for `purchaseWithReceipt` events
+  billing.on('purchaseWithReceipt', this.onPurchaseWithReceipt);
+
+  // called after a purchase - includes the app store specific 'signature'
+  // for validating the purchase from an external server
+  this.onPurchaseWithReceipt = function (info) {
+    logger.log("Purchase With Receipt! Item: " + info.sku + " Signature: " + info.signature);
+
+    // send to amplitude
+    var item = ITEMS[info.sku];
+    amplitude.trackRevenue(
+      info.sku,
+      item.price,
+      item.quantity,
+      info.signature
+    );
+  };
+~~~
+
 
 ## Checking for Market Availability
 
