@@ -287,11 +287,11 @@ Common failure values:
 ### billing.purchase (itemName, [simulate])
 
 Parameters
-:	1. `itemName {string}` ---The item name string.
-	2. `[simulate {string}]` ---Optional simulation mode: `undefined` means disabled. "simulate" means simulate a successful purchase.  Any other value will be used as a simulated failure string.
+:    `itemName {string}` ---The item name string.
+:    `[simulate {string}]` ---Optional simulation mode: `undefined` means disabled. "simulate" means simulate a successful purchase.  Any other value will be used as a simulated failure string.
 
 Returns
-:    1. `void`
+:    `void`
 
 Initiate the purchase of an item by its name.
 
@@ -306,10 +306,10 @@ billing.purchase("fiveCoins");
 ### billing.restore ([callback])
 
 Parameters
-:	1. `[callback {function}]` ---Optional callback.
+:    `[callback {function}]` ---Optional callback.
 
 Returns
-:    1. `void`
+:    `void`
 
 Initiate restoring old purchases.  These will only restore "managed" purchases set up for your application that are tracked by the app store servers.  Consumable purchases will be lost if local storage is wiped for any reason.
 
@@ -331,11 +331,22 @@ See the guide section above on `Restoring Purchases` for more information.
 
 ##### Simulation Mode
 
-To test purchases without hitting the market, pass a second parameter of "simulate" or "cancel".  On browser builds or in the web simulator, purchases will always simulate success otherwise.
+To test purchases, pass a second parameter to the
+purchase method ("simulate" for success; "cancel", "refund", or "unavailable"
+for failure).
+
+On android, this will overwrite the item sku to use the test items the play
+store provides, which will simulate the full purchase loop, including
+accessing the store (this will fail if you do not have access to the store, just
+like a real purchase).
+
+On iOS, simulated purchases will simply return immediately.
 
 ~~~
 billing.purchase("fiveCoins", "simulate"); // Simulates success
 billing.purchase("fiveCoins", "cancel"); // Simulates failure "cancel"
+billing.purchase("fiveCoins", "refund"); // Simulates failure "refunded"
+billing.purchase("fiveCoins", "unavailable"); // Simulates failure "unavailable"
 ~~~
 
 Simulation mode does not support the `billing.restore` method.
