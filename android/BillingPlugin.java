@@ -44,13 +44,14 @@ public class BillingPlugin implements IPlugin {
 	static private final int BUY_REQUEST_CODE = 123450;
 
 	public class PurchaseEvent extends com.tealeaf.event.Event {
-		String sku, token, failure, signature;
+		String sku, token, failure, signature, purchaseData;
 
-		public PurchaseEvent(String sku, String token, String signature, String failure) {
+		public PurchaseEvent(String sku, String token, String signature, String purchaseData, String failure) {
 			super("billingPurchase");
 			this.sku = sku;
 			this.token = token;
 			this.signature = signature;
+			this.purchaseData = purchaseData;
 			this.failure = failure;
 		}
 	}
@@ -66,18 +67,20 @@ public class BillingPlugin implements IPlugin {
 	}
 
 	public class OwnedEvent extends com.tealeaf.event.Event {
-		ArrayList<String> skus, tokens, signatures;
+		ArrayList<String> skus, tokens, signatures, purchaseData;
 		String failure;
 
 		public OwnedEvent(
 				ArrayList<String> skus,
 				ArrayList<String> tokens,
 				ArrayList<String> signatures,
+				ArrayList<String> purchaseData,
 				String failure) {
 			super("billingOwned");
 			this.skus = skus;
 			this.tokens = tokens;
 			this.signatures = signatures;
+			this.purchaseData = purchaseData;
 			this.failure = failure;
 		}
 	}
@@ -171,7 +174,7 @@ public class BillingPlugin implements IPlugin {
 
 			synchronized (mServiceLock) {
 				if (mService == null) {
-					EventQueue.pushEvent(new PurchaseEvent(sku, null, null, "service"));
+					EventQueue.pushEvent(new PurchaseEvent(sku, null, null, null, "service"));
 					return;
 				}
 
@@ -202,7 +205,7 @@ public class BillingPlugin implements IPlugin {
 		}
 
 		if (!success && sku != null) {
-			EventQueue.pushEvent(new PurchaseEvent(sku, null, null, "failed"));
+			EventQueue.pushEvent(new PurchaseEvent(sku, null, null, null, "failed"));
 		}
 	}
 
@@ -264,6 +267,7 @@ public class BillingPlugin implements IPlugin {
 		ArrayList<String> skus = new ArrayList<String>();
 		ArrayList<String> tokens = new ArrayList<String>();
 		ArrayList<String> signatures = new ArrayList<String>();
+		ArrayList<String> purchaseDataFullList = new ArrayList<String>();
 		boolean success = false;
 
 		try {
@@ -273,7 +277,7 @@ public class BillingPlugin implements IPlugin {
 
 			synchronized (mServiceLock) {
 				if (mService == null) {
-					EventQueue.pushEvent(new OwnedEvent(null, null, null, "service"));
+					EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "service"));
 					return;
 				}
 
@@ -284,7 +288,7 @@ public class BillingPlugin implements IPlugin {
 			int responseCode = ownedItems.getInt("RESPONSE_CODE", 1);
 			if (responseCode != 0) {
 				logger.log("{billing} WARNING: Failure to create owned items bundle:", responseCode);
-				EventQueue.pushEvent(new OwnedEvent(null, null, null, "failed"));
+				EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "failed"));
 			} else {
 				ArrayList ownedSkus = 
 					ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
@@ -303,24 +307,26 @@ public class BillingPlugin implements IPlugin {
 					JSONObject json = new JSONObject(purchaseData);
 					String token = json.getString("purchaseToken");
 
-					// TODO: Provide purchase data
-					// TODO: Verify signatures
-
 					if (sku != null && token != null && signature != null) {
 						skus.add(sku);
 						tokens.add(token);
 						signatures.add(signature);
+						purchaseDataFullList.add(purchaseData);
 					}
 				} 
 
 				// TODO: Use continuationToken to retrieve > 700 items
 
-				EventQueue.pushEvent(new OwnedEvent(skus, tokens, signatures, null));
+				EventQueue.pushEvent(
+						new OwnedEvent(
+							skus, tokens, signatures, purchaseDataFullList, null
+						)
+					);
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
 			e.printStackTrace();
-			EventQueue.pushEvent(new OwnedEvent(null, null, null, "failed"));
+			EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "failed"));
 		}
 	}
 
@@ -367,7 +373,7 @@ public class BillingPlugin implements IPlugin {
 
 				if (purchaseData == null) {
 					logger.log("{billing} WARNING: Ignored null purchase data with result code:", resultCode, "and response code:", responseCode);
-					EventQueue.pushEvent(new PurchaseEvent(null, null, null, responseCode));
+					EventQueue.pushEvent(new PurchaseEvent(null, null, null, null, responseCode));
 				} else {
 					JSONObject jo = new JSONObject(purchaseData);
 					sku = jo.getString("productId");
@@ -380,22 +386,22 @@ public class BillingPlugin implements IPlugin {
 								String token = jo.getString("purchaseToken");
 
 								logger.log("{billing} Successfully purchased SKU:", sku);
-								EventQueue.pushEvent(new PurchaseEvent(sku, token, dataSignature, null));
+								EventQueue.pushEvent(new PurchaseEvent(sku, token, dataSignature, purchaseData, null));
 								break;
 							case Activity.RESULT_CANCELED:
 								logger.log("{billing} Purchase canceled for SKU:", sku, "with result code:", resultCode, "and response code:", responseCode);
-								EventQueue.pushEvent(new PurchaseEvent(sku, null, null, responseCode));
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, null, null, responseCode));
 								break;
 							default:
 								logger.log("{billing} Unexpected result code for SKU:", sku, "with result code:", resultCode, "and response code:", responseCode);
-								EventQueue.pushEvent(new PurchaseEvent(sku, null, null, responseCode));
+								EventQueue.pushEvent(new PurchaseEvent(sku, null, null, null, responseCode));
 						}
 					}
 				}
 			} catch (JSONException e) {
 				logger.log("{billing} WARNING: Failed to parse purchase data:", e);
 				e.printStackTrace();
-				EventQueue.pushEvent(new PurchaseEvent(null, null, null, "failed"));
+				EventQueue.pushEvent(new PurchaseEvent(null, null, null, null, "failed"));
 			}
 		}
 	}

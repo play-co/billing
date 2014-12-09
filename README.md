@@ -107,10 +107,12 @@ sent. The event includes an `sku` property that matches the item name sent to
 the purchase method and a `signature` property.
 
 On iOS this is a base 64 encoded string from the [transactionReceipt](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentTransaction_Class/index.html#//apple_ref/occ/instp/SKPaymentTransaction/transactionReceipt)
-NSData (deprecated in iOS 7 but still remains the standard for most analytics platforms
-and is the only way to support older devices). On Android, this is the value in
-the `INAPP_DATA_SIGNATURE` string on the purchase activity data. More info in
-[the
+NSData (deprecated in iOS 7 but still remains the standard for most analytics
+platforms and is the only way to support older devices). On Android, this is
+the value in the `INAPP_DATA_SIGNATURE` string on the purchase activity data.
+Android also includes the json `purchaseData` payload from the store.
+
+More info in [the
 docs](http://developer.android.com/google/play/billing/billing_integrate.html#Purchase).
 
 You can listen for the `purchaseWithReceipt` event and pass it on to your own
@@ -126,7 +128,7 @@ passes the signature data on to the amplitude module.
   // called after a purchase - includes the app store specific 'signature'
   // for validating the purchase from an external server
   this.onPurchaseWithReceipt = function (info) {
-    logger.log("Purchase With Receipt! Item: " + info.sku + " Signature: " + info.signature);
+    logger.log("Purchase With Receipt! Item: " + info.sku);
 
     // send to amplitude
     var item = ITEMS[info.sku];
@@ -134,7 +136,8 @@ passes the signature data on to the amplitude module.
       info.sku,
       item.price,
       item.quantity,
-      info.signature
+      info.signature,
+      info.purchaseData
     );
   };
 ~~~
