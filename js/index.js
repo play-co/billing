@@ -68,10 +68,14 @@ function creditConsumedItem(item) {
 			}
 
 			// emit purchaseWithReceipt event
+			// sku is the purchased item name
+			// signature is the store specific signing string
+			// purchaseData is the purchase json object (google play only)
 			if (itemSignature[item]) {
 				billing.emit('purchaseWithReceipt', {
 					sku: item,
-					signature: itemSignature[item]
+					signature: itemSignature[item],
+					purchaseData: itemPurchaseData[item]
 				});
 			}
 			delete consumedItems[item];
@@ -160,7 +164,10 @@ initializeFromLocalStorage();
 // Maps of tokens <-> items from market
 var tokenItem = {};
 var itemToken = {};
+
+// signature and purchase data from market
 var itemSignature = {};
+var itemPurchaseData = {};
 
 // Flag: Has read purchases from the market?
 var readPurchases = false;
@@ -239,7 +246,7 @@ function onMarketStateChange() {
 }
 
 // If just simulating native device,
-if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
+if (!GLOBAL.NATIVE || device.isSimulator) {
 	logger.log("Installing fake billing API");
 } else {
 	logger.log("Installing JS billing component for native");
@@ -294,11 +301,12 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	// Request initial market state
 	NATIVE.plugins.sendEvent("BillingPlugin", "isConnected", "{}");
 
-	function nativePurchasedItem(sku, token, signature) {
+	function nativePurchasedItem(sku, token, signature, purchaseData) {
 		// Set up map
 		tokenItem[token] = sku;
 		itemToken[sku] = token;
 		itemSignature[sku] = signature;
+		itemPurchaseData[sku] = purchaseData;
 
 		// Record purchases
 		purchasedItem(sku);
@@ -323,7 +331,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 				onFailure(failure, sku);
 			}
 		} else {
-			nativePurchasedItem(sku, evt.token, evt.signature);
+			nativePurchasedItem(sku, evt.token, evt.signature, evt.purchaseData);
 		}
 	});
 
@@ -380,9 +388,15 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 			var skus = evt.skus;
 			var tokens = evt.tokens;
 			var signatures = evt.signatures || [];
+			var purchaseData = evt.purchaseData || [];
 			if (skus && skus.length > 0) {
 				for (var ii = 0, len = skus.length; ii < len; ++ii) {
-					nativePurchasedItem(skus[ii], tokens[ii], signatures[ii]);
+					nativePurchasedItem(
+						skus[ii],
+						tokens[ii],
+						signatures[ii],
+						purchaseData[ii]
+					);
 				}
 			}
 		}
