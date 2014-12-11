@@ -61,23 +61,19 @@ function purchasedItem(item) {
 function creditConsumedItem(item) {
 	try {
 		if (typeof onPurchase === "function" && consumedItems[item]) {
-			try {
-				onPurchase(item);
-			} catch(e) {
-				logger.log("onPurchase CALLBACK FAILURE!")
-			}
-
-			// emit purchaseWithReceipt event
-			// sku is the purchased item name
 			// signature is the store specific signing string
 			// purchaseData is the purchase json object (google play only)
-			if (itemSignature[item]) {
-				billing.emit('purchaseWithReceipt', {
-					sku: item,
-					signature: itemSignature[item],
-					purchaseData: itemPurchaseData[item]
-				});
+			var transactionInfo = {
+				signature: itemSignature[item],
+				purchaseData: itemPurchaseData[item]
+			};
+
+			try {
+				onPurchase(item, transactionInfo);
+			} catch(e) {
+				logger.log("onPurchase CALLBACK FAILURE!", e)
 			}
+
 			delete consumedItems[item];
 			localStorage.setItem("billingConsumed", JSON.stringify(consumedItems));
 
