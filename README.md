@@ -45,7 +45,9 @@ javascript code.
 
 ## Handling Purchases
 
-In the JavaScript code for your game, you should write some code to handle in-app purchases.  After reading the previous state of the purchasable items from `localStorage`, your code should set up a `billing.onPurchase` handler:
+In the JavaScript code for your game, you should write some code to handle
+in-app purchases.  After reading the previous state of the purchasable items
+from `localStorage`, your code should set up a `billing.onPurchase` handler:
 
 ~~~
 // Initialize the coin counter
@@ -70,13 +72,21 @@ function handlePurchase(item) {
 billing.onPurchase = handlePurchase;
 ~~~
 
-The callback you set for `billing.onPurchase` is only called on successful purchases.  It will be called once for each purchase that should be credited to the player.  Purchases will be queued up until the callback is set, and then they will all be delivered, one at a time.
+The callback you set for `billing.onPurchase` is only called on successful
+purchases.  It will be called once for each purchase that should be credited to
+the player.  Purchases will be queued up until the callback is set, and then
+they will all be delivered, one at a time.
 
 After a player successfully purchases an item, it is a good idea to store it in
 offline local storage to persist between runs of the game.  This can be done
 with the normal HTML5 localStorage API as shown above.
 
-Consumable purchases must be tracked by your own application.  Managed purchases can be tracked by the App Store, but will require you to implement a Restore Purchases button in your app.  If you are tracking managed purchases in your local storage data, be aware that the `billing.onPurchase` callback will likely be called with that item again while restoring purchases, so you will need to avoid double-crediting the player.
+Consumable purchases must be tracked by your own application.  Managed purchases
+can be tracked by the App Store, but will require you to implement a Restore
+Purchases button in your app.  If you are tracking managed purchases in your
+local storage data, be aware that the `billing.onPurchase` callback will likely
+be called with that item again while restoring purchases, so you will need to
+avoid double-crediting the player.
 
 
 ## Handling Purchase Failures
@@ -97,51 +107,9 @@ billing.onFailure = handleFailure;
 
 Handling these failures is *optional*.
 
-One way to respond is to pop up a modal dialog that says "please check that Airplane mode is disabled and try again later."  It may also be interesting to do some analytics on how often users cancel purchases or fail to make purchases.
-
-## Handling Purchase Validation
-
-Additionally, the billing plugin also emits a `purchaseWithReceipt` event when a
-transaction is completed and it has been signed by the store from which it was
-sent. The event includes an `sku` property that matches the item name sent to
-the purchase method and a `signature` property.
-
-On iOS this is a base 64 encoded string from the [transactionReceipt](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentTransaction_Class/index.html#//apple_ref/occ/instp/SKPaymentTransaction/transactionReceipt)
-NSData (deprecated in iOS 7 but still remains the standard for most analytics
-platforms and is the only way to support older devices). On Android, this is
-the value in the `INAPP_DATA_SIGNATURE` string on the purchase activity data.
-Android also includes the json `purchaseData` payload from the store.
-
-More info in [the
-docs](http://developer.android.com/google/play/billing/billing_integrate.html#Purchase).
-
-You can listen for the `purchaseWithReceipt` event and pass it on to your own
-external server for validation or send it to an analytics platform that supports
-validating purchases. Here is an example from the demoBilling app which then
-passes the signature data on to the amplitude module.
-
-~~~
-
-  // listen for `purchaseWithReceipt` events
-  billing.on('purchaseWithReceipt', this.onPurchaseWithReceipt);
-
-  // called after a purchase - includes the app store specific 'signature'
-  // for validating the purchase from an external server
-  this.onPurchaseWithReceipt = function (info) {
-    logger.log("Purchase With Receipt! Item: " + info.sku);
-
-    // send to amplitude
-    var item = ITEMS[info.sku];
-    amplitude.trackRevenue(
-      info.sku,
-      item.price,
-      item.quantity,
-      info.signature,
-      info.purchaseData
-    );
-  };
-~~~
-
+One way to respond is to pop up a modal dialog that says "please check that
+Airplane mode is disabled and try again later."  It may also be interesting to
+do some analytics on how often users cancel purchases or fail to make purchases.
 
 ## Checking for Market Availability
 
@@ -205,11 +173,14 @@ billing.restore(function(err) {
 });
 ~~~
 
-Your `billing.onPurchase` callback will receive all of the old items while restoring.
+Your `billing.onPurchase` callback will receive all of the old items while
+restoring.
 
-Finally, the provided callback will be called, letting you know when the restoration completes, or if the restoration failed and why.
+Finally, the provided callback will be called, letting you know when the
+restoration completes, or if the restoration failed and why.
 
-If an in-game button press triggers `billing.restore` then the button should be disabled until the result comes back to your callback.
+If an in-game button press triggers `billing.restore` then the button should be
+disabled until the result comes back to your callback.
 
 # billing object
 
@@ -243,26 +214,82 @@ It is safe to disregard this flag.
 
 ~~~
 if (billing.isMarketAvailable) {
-	logger.log("~~~ MARKET IS AVAILABLE");
+  logger.log("~~~ MARKET IS AVAILABLE");
 } else {
-	logger.log("~~~ MARKET IS NOT AVAILABLE");
+  logger.log("~~~ MARKET IS NOT AVAILABLE");
 }
 ~~~
 
-### billing.onPurchase (itemName)
+### billing.onPurchase (itemName, transactionInfo)
 
 + `callback {function}` ---Set to your callback function.
-			The first argument will be the name of the item that should be credited to the player.
+  * itemName - the name of the item that should be credited to the player
+  * transactionInfo - an object with the following fields:
+    * signature - the transaction signature for the given store
+    * purchaseData - (google play store only) json encoded string with the
+      purchase data for the transaction
 
-Called whenever a purchase completes.  This may also be called for a purchase that was outstanding from a previous session that had not been credited to the player yet.
+Called whenever a purchase completes.  This may also be called for a purchase
+that was outstanding from a previous session that had not yet been credited to
+the player.
 
-The callback function should not pop up the purchase success dialog while they are playing.  Setting the `billing.onPurchase` callback to **null** when purchases should not interrupt gameplay is recommended.
+The callback function should not pop up the purchase success dialog while they
+are playing.  Setting the `billing.onPurchase` callback to **null** when
+purchases should not interrupt gameplay is recommended.
 
 ~~~
 billing.onPurchase = function(itemName) {
 	logger.log("~~~ PURCHASED:", itemName);
 });
 ~~~
+
+## Handling Purchase Validation
+
+The onPurchase function is called with the itemName (matching the store id) and
+a `transactionInfo` object with `signature` and `purchaseData` fields
+which can be used to validate purchases against the stores using an external
+server or third party service.
+
+On iOS, `signature` is a base 64 encoded string from the
+[transactionReceipt](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentTransaction_Class/index.html#//apple_ref/occ/instp/SKPaymentTransaction/transactionReceipt)
+NSData (deprecated in iOS 7 but still remains the standard for most analytics
+platforms and is the only way to support older devices). On iOS,
+`purchaseData` is unused.
+
+On Android, `signature` is
+the value in the `INAPP_DATA_SIGNATURE` string on the purchase activity data.
+Android also includes the json encoded `purchaseData` payload from the store.
+
+More info in [the
+docs](http://developer.android.com/google/play/billing/billing_integrate.html#Purchase).
+
+Here is an example from the demoBilling app which then passes the `signature`
+and `purchaseData` on to the amplitude module for validation.
+
+~~~
+  var ITEMS = {
+    'testpurchase10': {price: .99, quantity: 1},
+    'testpurchase50': {price: 1.99, quantity: 1}
+  };
+
+  billing.onPurchase = function onPurchase (itemName, transactionInfo) {
+    console.log("Purchase Successful! Item: " + itemName);
+
+    // if no transactionInfo, use empty object
+    transactionInfo = transactionInfo || {};
+
+    // send to amplitude for tracking and validation
+    var item = ITEMS[itemName];
+    amplitude.trackRevenue(
+      itemName,
+      item.price,
+      item.quantity,
+      transactionInfo.signature,
+      transactionInfo.purchaseData
+    );
+  };
+~~~
+
 
 ### billing.onFailure (reason, itemName)
 
