@@ -71,7 +71,7 @@ function creditConsumedItem(item) {
 			try {
 				onPurchase(item, transactionInfo);
 			} catch(e) {
-				logger.log("onPurchase CALLBACK FAILURE!", e)
+				logger.log("onPurchase CALLBACK FAILURE!")
 			}
 
 			delete consumedItems[item];
