@@ -11,7 +11,7 @@ a working example of the various billing features.
 Install the billing module using the standard devkit install process:
 
 ~~~
-devkit install https://github.com/gameclosure/billing#v2.0.0
+devkit install https://github.com/gameclosure/billing#v3.0.1
 ~~~
 
 You can now import the billing object anywhere in your application:
