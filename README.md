@@ -161,7 +161,7 @@ function EnablePurchaseEvents() {
 
 In order to ship an app with in-app purchases other than "Consumable" on the iOS App Store, you are required to include a [Restore Purchases] button, which must query the App Store for past purchases made from the same Apple ID and restore them in the game.  The way to implement this button is by using the `billing.restore` function.
 
-Note that on iOS you do not need to do this if all of your purhcases are consumable.
+Note that on iOS you do not need to do this if all of your purchases are consumable.
 
 ~~~
 billing.restore(function(err) {
