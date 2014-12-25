@@ -10,6 +10,9 @@
 
 	self.purchases = nil;
 	self.bundleID = nil;
+	self.products = nil;
+	self.localizedPurchases = nil;
+	self.currentPurchaseSku = nil;
 
 	[super dealloc];
 }
@@ -25,6 +28,13 @@
 	[[SKPaymentQueue defaultQueue] addTransactionObserver:self];
 
 	self.bundleID = @"unknown.bundle";
+
+	// store list of all the purchases we know about
+	self.products = [NSMutableDictionary dictionary];
+	self.localizedPurchases = [NSMutableDictionary dictionary];
+
+	// store sku of item that is currently being purchased
+	self.currentPurchaseSku = nil;
 
 	return self;
 }
@@ -57,6 +67,11 @@
 										  signature, @"signature",
 										  [NSNull null], @"failure",
 										  nil]];
+
+	// clear current purchase
+	if ([sku isEqualToString:self.currentPurchaseSku]) {
+		self.currentPurchaseSku = nil;
+	}
 }
 
 - (void) failedTransaction: (SKPaymentTransaction *)transaction {
@@ -65,6 +80,11 @@
 	// Strip bundleID prefix
 	if ([sku hasPrefix:self.bundleID]) {
 		sku = [sku substringFromIndex:([self.bundleID length] + 1)];
+	}
+
+	// clear current purchase
+	if ([sku isEqualToString:self.currentPurchaseSku]) {
+		self.currentPurchaseSku = nil;
 	}
 
 	// Generate error code string
@@ -94,47 +114,89 @@
 										  errorCode,@"failure",
 										  nil]];
 
-    [[SKPaymentQueue defaultQueue] finishTransaction: transaction];
+	[[SKPaymentQueue defaultQueue] finishTransaction: transaction];
 }
 
 - (void)productsRequest:(SKProductsRequest *)request didReceiveResponse:(SKProductsResponse *)response {
 	NSLOG(@"{billing} Got products response with %d hits and %d misses", (int)response.products.count, (int)response.invalidProductIdentifiers.count);
 
-	bool success = false;
 	NSString *sku = nil;
+	NSUInteger bundleIDIndex = [self.bundleID length] + 1;
+	SKProduct *currentProduct = nil;
 
 	NSArray *products = response.products;
 	if (products.count > 0) {
-		SKProduct *product = [products objectAtIndex:0];
 
-		if (product) {
+		NSNumberFormatter *numberFormatter = [[NSNumberFormatter alloc] init];
+		[numberFormatter setFormatterBehavior:NSNumberFormatterBehavior10_4];
+		[numberFormatter setNumberStyle:NSNumberFormatterCurrencyStyle];
+
+		for (SKProduct* product in products) {
 			NSLOG(@"{billing} Found product id=%@, title=%@", product.productIdentifier, product.localizedTitle);
 
-			SKPayment *payment =  [SKPayment paymentWithProduct:product];
-			[[SKPaymentQueue defaultQueue] addPayment:payment];
+			// if this is the current purchase target
+			if ([sku isEqualToString:self.currentPurchaseSku]) {
+				currentProduct = product;
+			}
 
-			success = true;
+			// get the formatted price
+			[numberFormatter setLocale:product.priceLocale];
+			NSString *formattedPrice = [numberFormatter stringFromNumber:product.price];
+
+			// get sku - strip bundle id if possible
+			sku = product.productIdentifier;
+			if (sku != nil && [sku hasPrefix:self.bundleID]) {
+				sku = [sku substringFromIndex:bundleIDIndex];
+			}
+
+			// save the product data
+			[self.products setObject:product forKey:sku];
+
+			// save localized data
+			[self.localizedPurchases setObject:
+				[NSDictionary dictionaryWithObjectsAndKeys:
+					formattedPrice, @"displayPrice",
+					product.localizedTitle, @"title",
+					product.localizedDescription, @"description",
+					nil
+				]
+				forKey:sku
+			];
 		}
 	}
 
 	for (NSString *invalidProductId in response.invalidProductIdentifiers) {
 		NSLOG(@"{billing} Unused product id: %@", invalidProductId);
-
-		sku = invalidProductId;
 	}
 
-	if (!success) {
-		// Strip bundleID prefix
-		if (sku != nil && self.bundleID && [sku hasPrefix:self.bundleID]) {
-			sku = [sku substringFromIndex:([self.bundleID length] + 1)];
-		}
+	// emit a purchasesLocalized event
+	[self emitLocalizedPurchases];
 
-		[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
-											  @"billingPurchase",@"name",
-											  (sku == nil ? [NSNull null] : sku),@"sku",
-											  [NSNull null],@"token",
-											  @"invalid product",@"failure",
-											  nil]];
+	// if currently trying to purchase something
+	if (self.currentPurchaseSku != nil) {
+		// if we have data for this purchase, start a transaction
+		if (currentProduct != nil) {
+			SKPayment *payment = [SKPayment paymentWithProduct:currentProduct];
+			[[SKPaymentQueue defaultQueue] addPayment:payment];
+		} else {
+			// Strip bundleID prefix
+			sku = self.currentPurchaseSku;
+			if (sku != nil && self.bundleID && [sku hasPrefix:self.bundleID]) {
+				sku = [sku substringFromIndex:([self.bundleID length] + 1)];
+			}
+
+			[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+												  @"billingPurchase",@"name",
+												  (sku == nil ? [NSNull null] : sku),@"sku",
+												  [NSNull null],@"token",
+												  @"invalid product",@"failure",
+												  nil]];
+		}
+	}
+
+	// clear current purchase
+	if ([sku isEqualToString:self.currentPurchaseSku]) {
+		self.currentPurchaseSku = nil;
 	}
 }
 
@@ -163,11 +225,17 @@
 				NSLOG(@"{billing} Ignoring unknown transaction state %d: error=%d for sku=%@ and token=%@", transaction.transactionState, (int)transaction.error.code, sku, token);
 				break;
 		}
+
+		// clear current purchase
+		if ([sku isEqualToString:self.currentPurchaseSku]) {
+			self.currentPurchaseSku = nil;
+		}
 	}
 }
 
 - (void) requestPurchase:(NSString *)productIdentifier {
-	// This is done exclusively to set up an SKPayment object with the result (it will initiate a purchase)
+	// This is done exclusively to set up an SKPayment object with the result (it
+	// will initiate a purchase)
 
 	NSString *bundledProductId = [self.bundleID stringByAppendingFormat:@".%@", productIdentifier];
 
@@ -190,7 +258,7 @@
 		self.bundleID = bundleID;
 
 		NSLOG(@"{billing} Initialized with manifest bundleID: '%@'", bundleID);
-		
+
 	}
 	@catch (NSException *exception) {
 		NSLOG(@"{billing} Failure to get ios:bundleID from manifest file: %@", exception);
@@ -214,7 +282,18 @@
 	@try {
 		sku = [jsonObject valueForKey:@"sku"];
 
-		[self requestPurchase:sku];
+		// if we already have product data for this item id, start purchase
+		SKProduct *product = [self.products valueForKey:sku];
+		if (product != nil) {
+			NSLOG(@"{billing} already have data for %@, starting purchase", sku);
+			SKPayment *payment = [SKPayment paymentWithProduct:product];
+			[[SKPaymentQueue defaultQueue] addPayment:payment];
+		} else {
+			// otherwise, check with the store first
+			NSLOG(@"{billing} no product data for %@, querying store", sku);
+			self.currentPurchaseSku = sku;
+			[self requestPurchase:sku];
+		}
 	}
 	@catch (NSException *exception) {
 		NSLOG(@"{billing} WARNING: Unable to purchase item: %@", exception);
@@ -340,6 +419,35 @@
 											  exception,@"failure",
 											  nil]];
 	}
+}
+
+- (void) localizePurchases:(NSDictionary *)jsonObject {
+	NSString *bundledProductId;
+	NSMutableSet *products = [[NSMutableSet alloc] init];
+
+	// go through all the requested items and add to the products set
+	// with and without the bundleID added (to match existing code)
+	id items = [jsonObject valueForKey:@"items"];
+	for (id key in items) {
+		bundledProductId = [self.bundleID stringByAppendingFormat:@".%@", key];
+		[products addObject:bundledProductId];
+		[products addObject:key];
+	}
+
+	// create productsrequest and set self as delegate
+	NSSet *productIdentifiers = [NSSet setWithSet: (NSSet *)products];
+	SKProductsRequest *productsRequest = [[SKProductsRequest alloc] initWithProductIdentifiers:productIdentifiers];
+	productsRequest.delegate = self;
+
+	// start the request
+	[productsRequest start];
+}
+
+- (void) emitLocalizedPurchases {
+	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
+											  @"purchasesLocalized",@"name",
+											  self.localizedPurchases,@"purchases",
+											  nil]];
 }
 
 @end
