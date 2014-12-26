@@ -28,6 +28,7 @@ import android.util.Log;
 
 import android.content.ComponentName;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.app.PendingIntent;
 
 import com.tealeaf.EventQueue;
@@ -98,6 +99,25 @@ public class BillingPlugin implements IPlugin {
 		String failure;
 		public RestoreEvent(String failure) {
 			super("billingRestore");
+			this.failure = failure;
+		}
+	}
+
+	public class PurchasesLocalizedEvent extends com.tealeaf.event.Event {
+		ArrayList<String> skus, titles, descriptions, displayPrices;
+		String failure;
+
+		public PurchasesLocalizedEvent(
+				ArrayList<String> skus,
+				ArrayList<String> titles,
+				ArrayList<String> descriptions,
+				ArrayList<String> displayPrices,
+				String failure) {
+			super("purchasesLocalized");
+			this.skus = skus;
+			this.titles = titles;
+			this.descriptions = descriptions;
+			this.displayPrices = displayPrices;
 			this.failure = failure;
 		}
 	}
@@ -321,7 +341,7 @@ public class BillingPlugin implements IPlugin {
 						signatures.add(signature);
 						purchaseDataFullList.add(purchaseData);
 					}
-				} 
+				}
 
 				// TODO: Use continuationToken to retrieve > 700 items
 
@@ -417,6 +437,89 @@ public class BillingPlugin implements IPlugin {
 	public void restoreCompleted(String jsonData) {
 		logger.log("{billing} WARNING: Restore does nothing on android");
 		EventQueue.pushEvent(new RestoreEvent("not implemented for android"));
+	}
+
+	public void localizePurchases(String jsonData) {
+
+		ArrayList<String> skus = new ArrayList<String>();
+		ArrayList<String> titles = new ArrayList<String>();
+		ArrayList<String> descriptions = new ArrayList<String>();
+		ArrayList<String> displayPrices = new ArrayList<String>();
+
+		JSONArray items = null;
+		ArrayList<String> itemList = new ArrayList<String> ();
+		try {
+			// get list of item ids from payload
+			JSONObject jsonObject = new JSONObject(jsonData);
+			items = jsonObject.getJSONArray("items");
+
+			int length = items.length();
+			for (int i = 0; i < length; i++) {
+				itemList.add(items.getString(i));
+			}
+		} catch (JSONException e) {
+			logger.log("{billing} WARNING: Failed to parse localizePurchase data:", e);
+			return;
+		}
+
+		synchronized (mServiceLock) {
+			// if service is not available, do nothing
+			if (mService == null) {
+				logger.log("{billing} WARNING: Market not available; localization request abandoned");
+				EventQueue.pushEvent(new PurchasesLocalizedEvent(
+							null, null, null, null, "failed"
+						)
+					);
+				return;
+			}
+		}
+
+		// from https://gist.github.com/first087/9088162
+		// and hashcube billing plugin https://github.com/hashcube/billing/commit/ccd811a652f2b89e996713a00db16e4c3563f786
+		final Bundle querySkus = new Bundle();
+		querySkus.putStringArrayList("ITEM_ID_LIST", itemList);
+
+		Bundle skuDetails = null;
+		try {
+			skuDetails = mService.getSkuDetails(3, _ctx.getPackageName(), "inapp", querySkus);
+		} catch (RemoteException e) {
+			logger.log("{billing} WARNING: Exception while fetching purchase data:", e);
+			return;
+		}
+
+		// get response code from bundle -- 0 means success
+		int response = skuDetails.getInt("RESPONSE_CODE");
+		if (response == 0) {
+			ArrayList<String> responseList = skuDetails.getStringArrayList("DETAILS_LIST");
+
+			try {
+				// for every item requested
+				for (String thisResponse : responseList) {
+					JSONObject object = new JSONObject(thisResponse);
+
+					// add everything to lists of fields to match existing
+					// getPurchases API
+					skus.add(object.getString("productId"));
+					titles.add(object.getString("title"));
+					descriptions.add(object.getString("description"));
+					displayPrices.add(object.getString("price"));
+
+					// other fields: price_amount_micros, price_currency_code
+					// http://developer.android.com/google/play/billing/billing_reference.html#getSkuDetails
+				}
+			} catch (JSONException e) {
+				logger.log("{billing} WARINNG: Exception while building localizedPurchase response:", e);
+			}
+
+			EventQueue.pushEvent(new PurchasesLocalizedEvent(
+						skus, titles, descriptions, displayPrices, null
+					)
+				);
+
+		} else {
+			logger.log("{billing} WARNING: Invalid response while localizing purchases");
+			return;
+		}
 	}
 
 	public void onNewIntent(Intent intent) {
