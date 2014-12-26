@@ -244,6 +244,10 @@ function onMarketStateChange() {
 // If just simulating native device,
 if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing fake billing API");
+	billing.restore = function (cb) {
+		logger.log("{billing} simulating billing.restore");
+		setTimeout(function () { cb && cb(); }, 2000);
+	};
 } else {
 	logger.log("Installing JS billing component for native");
 
@@ -282,7 +286,6 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 
 	Billing.prototype.restore = function(cb) {
 		NATIVE.plugins.sendEvent("BillingPlugin", "restoreCompleted", "{}");
-
 		onRestore = cb;
 	}
 
