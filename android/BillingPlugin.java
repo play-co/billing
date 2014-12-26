@@ -94,6 +94,14 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	public class RestoreEvent extends com.tealeaf.event.Event {
+		String failure;
+		public RestoreEvent(String failure) {
+			super("billingRestore");
+			this.failure = failure;
+		}
+	}
+
 	public BillingPlugin() {
 	}
 
@@ -404,6 +412,11 @@ public class BillingPlugin implements IPlugin {
 				EventQueue.pushEvent(new PurchaseEvent(null, null, null, null, "failed"));
 			}
 		}
+	}
+
+	public void restoreCompleted(String jsonData) {
+		logger.log("{billing} WARNING: Restore does nothing on android");
+		EventQueue.pushEvent(new RestoreEvent("not implemented for android"));
 	}
 
 	public void onNewIntent(Intent intent) {

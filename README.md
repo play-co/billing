@@ -159,9 +159,19 @@ function EnablePurchaseEvents() {
 
 ## Restoring Purchases
 
-In order to ship an app with in-app purchases other than "Consumable" on the iOS App Store, you are required to include a [Restore Purchases] button, which must query the App Store for past purchases made from the same Apple ID and restore them in the game.  The way to implement this button is by using the `billing.restore` function.
+In order to ship an app with in-app purchases other than "Consumable" on the iOS
+App Store, you are required to include a [Restore Purchases] button, which must
+query the App Store for past purchases made from the same Apple ID and restore
+them in the game.  The way to implement this button is by using the
+`billing.restore` function.
 
-Note that on iOS you do not need to do this if all of your purchases are consumable.
+Note that on iOS you do not need to do this if all of your purchases are
+consumable.
+
+On iOS, this functions by calling the [StoreKit
+`restoreCompletedTransactions`](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentQueue_Class/index.html#//apple_ref/occ/instm/SKPaymentQueue/restoreCompletedTransactions)
+function on ios, then fires the `billing.onPurchase` callback for each old
+purchase. On android, this does nothing.
 
 ~~~
 billing.restore(function(err) {
@@ -338,11 +348,19 @@ Parameters
 Returns
 :    `void`
 
-Initiate restoring old purchases.  These will only restore "managed" purchases set up for your application that are tracked by the app store servers.  Consumable purchases will be lost if local storage is wiped for any reason.
+Initiate restoring old purchases.  These will only restore "managed" purchases
+set up for your application that are tracked by the app store servers.
+Consumable purchases will be lost if local storage is wiped for any reason.
 
-Your `billing.onPurchase` callback will be called for each old purchase.
+This functions by calling the [StoreKit
+`restoreCompletedTransactions`](https://developer.apple.com/library/ios/documentation/StoreKit/Reference/SKPaymentQueue_Class/index.html#//apple_ref/occ/instm/SKPaymentQueue/restoreCompletedTransactions)
+function on ios, then fires the `billing.onPurchase` callback for each old
+purchase.
 
 When restoration completes, the optional callback provided to `billing.restore` will be invoked.
+
+NOTE: this is only implemented for the ios App Store. On android, this returns
+immediately with a 'not implemented on android' failure.
 
 ~~~
 billing.restore(function(err) {
