@@ -444,10 +444,29 @@
 }
 
 - (void) emitLocalizedPurchases {
+	// restructure into a bunch of lists to match existing getPurchases API
+
+	NSMutableArray *skus = [NSMutableArray array];
+	NSMutableArray *titles = [NSMutableArray array];
+	NSMutableArray *descriptions = [NSMutableArray array];
+	NSMutableArray *displayPrices = [NSMutableArray array];
+
+	for (NSString *sku in self.localizedPurchases) {
+		NSDictionary *purchase = [self.localizedPurchases objectForKey:sku];
+
+		[skus addObject:sku];
+		[titles addObject:[purchase valueForKey:@"title"]];
+		[descriptions addObject:[purchase valueForKey:@"description"]];
+		[displayPrices addObject:[purchase valueForKey:@"displayPrice"]];
+	}
+
 	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
-											  @"purchasesLocalized",@"name",
-											  self.localizedPurchases,@"purchases",
-											  nil]];
+		@"purchasesLocalized",@"name",
+		skus, @"skus",
+		titles, @"titles",
+		descriptions, @"descriptions",
+		displayPrices, @"displayPrices",
+		nil]];
 }
 
 @end

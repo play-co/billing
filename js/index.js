@@ -299,9 +299,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 
 	/**
 	 * Tell the stores to localize the purchases for the given items.
-	 * Will raise a purchasesLocalized event when finished. If the items
-	 * have already been localized, the plugin will skip the store
-	 * and fire the event immediately.
+	 * Will raise a purchasesLocalized event when finished.
 	 */
 	Billing.prototype.getLocalizedPurchases = function (items) {
 		NATIVE.plugins.sendEvent("BillingPlugin", "localizePurchases", JSON.stringify({
@@ -311,7 +309,17 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 
 	NATIVE.events.registerHandler('purchasesLocalized', function (evt) {
 		logger.log("{billing} received localized purchases from native", evt);
-		billing.emit('PurchasesLocalized', evt);
+
+		// build into a dictionary
+		var data = {purchases: {}};
+		for (var i = 0; i < evt.skus.length; i++) {
+			data.purchases[evt.skus[i]] = {
+				title: evt.titles[i],
+				description: evt.descriptions[i],
+				displayPrice: evt.displayPrices[i]
+			};
+		}
+		billing.emit('PurchasesLocalized', data);
 	});
 
 	// Request initial market state
