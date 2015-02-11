@@ -13,6 +13,7 @@
 	self.products = nil;
 	self.localizedPurchases = nil;
 	self.currentPurchaseSku = nil;
+	self.invalidProducts = nil;
 
 	[super dealloc];
 }
@@ -32,6 +33,7 @@
 	// store list of all the purchases we know about
 	self.products = [NSMutableDictionary dictionary];
 	self.localizedPurchases = [NSMutableDictionary dictionary];
+	self.invalidProducts = [[NSMutableArray alloc] init];
 
 	// store sku of item that is currently being purchased
 	self.currentPurchaseSku = nil;
@@ -166,6 +168,11 @@
 	}
 
 	for (NSString *invalidProductId in response.invalidProductIdentifiers) {
+		// Add object to invalidProducts list if it's not there
+		if ([self.invalidProducts indexOfObject:invalidProductId] == NSNotFound) {
+			[self.invalidProducts addObject:invalidProductId];
+		}
+
 		NSLOG(@"{billing} Unused product id: %@", invalidProductId);
 	}
 
@@ -428,10 +435,13 @@
 	// go through all the requested items and add to the products set
 	// with and without the bundleID added (to match existing code)
 	id items = [jsonObject valueForKey:@"items"];
+	NSString* productPrefix = [self.bundleID stringByAppendindString:@"."];
 	for (id key in items) {
-		bundledProductId = [self.bundleID stringByAppendingFormat:@".%@", key];
-		[products addObject:bundledProductId];
-		[products addObject:key];
+		if ([key hasPrefix:bundledProductId]) {
+			[products addObject:key];
+		} else {
+			[products addObject:[self.bundleID stringByAppendingFormat:@".%@", key]];
+		}
 	}
 
 	// create productsrequest and set self as delegate
@@ -460,13 +470,14 @@
 		[displayPrices addObject:[purchase valueForKey:@"displayPrice"]];
 	}
 
-	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
-		@"purchasesLocalized",@"name",
-		skus, @"skus",
-		titles, @"titles",
-		descriptions, @"descriptions",
-		displayPrices, @"displayPrices",
-		nil]];
+	[[PluginManager get] dispatchJSEvent:@{
+		@"name": @"purchasesLocalized",
+		@"skus": skus,
+		@"titles": titles,
+		@"descriptions": descriptions,
+		@"displayPrices": displayPrices,
+		@"invalidProductIdentifiers": self.invalidProducts
+	}];
 }
 
 @end

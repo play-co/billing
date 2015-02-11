@@ -252,7 +252,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	billing.getLocalizedPurchases = function (items) {
 		logger.log("{billing} simulating getting localized purchases");
 		setTimeout(function () {
-			var data = {purchases: {}};
+			var data = { purchases: {}, invalidProductIdentifiers: [] };
 			var itemIds = Object.keys(items);
 			for (var i = 0; i < itemIds.length; i++) {
 				data.purchases[itemIds[i]] = {
@@ -327,7 +327,10 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 		logger.log("{billing} received localized purchases from native", evt);
 
 		// build into a dictionary
-		var data = {purchases: {}};
+		var data = {
+			purchases: {},
+			invalidProductIdentifiers: evt.invalidProductIdentifiers || []
+		};
 		for (var i = 0; i < evt.skus.length; i++) {
 			data.purchases[evt.skus[i]] = {
 				title: evt.titles[i],
