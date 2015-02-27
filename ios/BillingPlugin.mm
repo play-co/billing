@@ -291,6 +291,12 @@
 
 		// if we already have product data for this item id, start purchase
 		SKProduct *product = [self.products valueForKey:sku];
+		if (product == nil) {
+			// look for same id with bundle on it
+			NSString* bundledSku = [self.bundleID stringByAppendingFormat:@".%@", sku];
+			product = [self.products valueForKey:bundledSku];
+		}
+
 		if (product != nil) {
 			NSLOG(@"{billing} already have data for %@, starting purchase", sku);
 			SKPayment *payment = [SKPayment paymentWithProduct:product];
@@ -429,15 +435,15 @@
 }
 
 - (void) localizePurchases:(NSDictionary *)jsonObject {
-	NSString *bundledProductId;
 	NSMutableSet *products = [[NSMutableSet alloc] init];
 
 	// go through all the requested items and add to the products set
 	// with and without the bundleID added (to match existing code)
 	id items = [jsonObject valueForKey:@"items"];
-	NSString* productPrefix = [self.bundleID stringByAppendindString:@"."];
+	NSString* productPrefix = [self.bundleID stringByAppendingString:@"."];
 	for (id key in items) {
-		if ([key hasPrefix:bundledProductId]) {
+		[products addObject:key];
+		if ([key hasPrefix:productPrefix]) {
 			[products addObject:key];
 		} else {
 			[products addObject:[self.bundleID stringByAppendingFormat:@".%@", key]];
