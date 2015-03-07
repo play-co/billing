@@ -89,31 +89,11 @@
 		self.currentPurchaseSku = nil;
 	}
 
-	// Generate error code string
-	NSString *errorCode = @"failed";
-	switch (transaction.error.code) {
-		case SKErrorClientInvalid:
-			errorCode = @"client invalid";
-			break;
-		case SKErrorPaymentCancelled:
-			errorCode = @"cancel";
-			break;
-		case SKErrorPaymentInvalid:
-			errorCode = @"payment invalid";
-			break;
-		case SKErrorPaymentNotAllowed:
-			errorCode = @"payment not allowed";
-			break;
-		case SKErrorStoreProductNotAvailable:
-			errorCode = @"item unavailable";
-			break;
-	}
-
 	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
 										  @"billingPurchase",@"name",
 										  sku,@"sku",
 										  [NSNull null],@"token",
-										  errorCode,@"failure",
+										  transaction.error.localizedDescription,@"failure",
 										  nil]];
 
 	[[SKPaymentQueue defaultQueue] finishTransaction: transaction];
@@ -405,10 +385,10 @@
 }
 
 - (void)paymentQueue:(SKPaymentQueue *)queue restoreCompletedTransactionsFailedWithError:(NSError *)error {
-	[[PluginManager get] dispatchJSEvent:[NSDictionary dictionaryWithObjectsAndKeys:
-										  @"billingRestore",@"name",
-										  error,@"failure",
-										  nil]];
+  [[PluginManager get] dispatchJSEvent:@{
+    @"name": @"billingRestore",
+    @"failure": [error localizedDescription]
+  }];
 }
 
 - (void)paymentQueueRestoreCompletedTransactionsFinished:(SKPaymentQueue *)queue {
