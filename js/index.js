@@ -253,11 +253,10 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 		logger.log("{billing} simulating getting localized purchases");
 		setTimeout(function () {
 			var data = { purchases: {}, invalidProductIdentifiers: [] };
-			var itemIds = Object.keys(items);
-			for (var i = 0; i < itemIds.length; i++) {
-				data.purchases[itemIds[i]] = {
-					title: itemIds[i] + ' localized title',
-					description: itemIds[i] + ' localized description',
+			for (var i = 0; i < items.length; i++) {
+				data.purchases[items[i]] = {
+					title: items[i] + ' localized title',
+					description: items[i] + ' localized description',
 					displayPrice: '$0.99'
 				};
 			}
