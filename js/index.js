@@ -136,21 +136,21 @@ function simulatePurchase(item, simulate) {
 				setTimeout(function() {
 					logger.log("Simulating item consume:", item);
 					consumePurchasedItem(item);
-				}, 2000);
+				}, 200);
 			} else {
 				logger.log("Item is already purchased.");
 				if (typeof onFailure === "function") {
 					onFailure("already owned", item);
 				}
 			}
-		}, 2000);
+		}, 200);
 	} else {
 		setTimeout(function() {
 			logger.log("Simulating item failure:", item);
 			if (typeof onFailure === "function") {
 				onFailure(simulate, item);
 			}
-		}, 1000);
+		}, 100);
 	}
 }
 
@@ -246,7 +246,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing fake billing API");
 	billing.restore = function (cb) {
 		logger.log("{billing} simulating billing.restore");
-		setTimeout(function () { cb && cb(); }, 2000);
+		setTimeout(function () { cb && cb(); }, 200);
 	};
 
 	billing.getLocalizedPurchases = function (items) {
@@ -261,7 +261,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 				};
 			}
 			billing.emit('PurchasesLocalized', data);
-		}, 2000);
+		}, 200);
 	};
 } else {
 	logger.log("Installing JS billing component for native");
