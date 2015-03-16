@@ -37,6 +37,10 @@ import com.tealeaf.event.*;
 import com.android.vending.billing.IInAppBillingService;
 
 /*
+ *
+ * TODO: support INAPP_CONTINUATION_TOKEN when querying store for purchases
+ *
+ *
  * https://developer.android.com/google/play/billing/billing_reference.html
  *
  * BILLING_RESPONSE_RESULT_OK                   0  Success
@@ -49,6 +53,8 @@ import com.android.vending.billing.IInAppBillingService;
  * BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED   7  Failure to purchase since item is already owned
  * BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED       8  Failure to consume since item is not owned
  */
+
+
 
 public class BillingPlugin implements IPlugin {
 	Context _ctx = null;
@@ -100,20 +106,51 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
+	// holds data for multiple purchases as queried from the play store
+	// for both getPurchases and restorePurchases
+	public class PurchasesInfo {
+		ArrayList<String> skus, tokens, signatures, purchaseData;
+		String failure;
+
+		public PurchasesInfo(
+				ArrayList<String> skus,
+				ArrayList<String> tokens,
+				ArrayList<String> signatures,
+				ArrayList<String> purchaseData,
+				String failure) {
+			this.skus = skus;
+			this.tokens = tokens;
+			this.signatures = signatures;
+			this.purchaseData = purchaseData;
+			this.failure = failure;
+		}
+	}
+
+	public class RestoreEvent extends com.tealeaf.event.Event {
+		ArrayList<String> skus, tokens, signatures, purchaseData;
+		String failure;
+
+		public RestoreEvent(
+				ArrayList<String> skus,
+				ArrayList<String> tokens,
+				ArrayList<String> signatures,
+				ArrayList<String> purchaseData,
+				String failure) {
+			super("billingRestore");
+			this.skus = skus;
+			this.tokens = tokens;
+			this.signatures = signatures;
+			this.purchaseData = purchaseData;
+			this.failure = failure;
+		}
+	}
+
 	public class ConnectedEvent extends com.tealeaf.event.Event {
 		boolean connected;
 
 		public ConnectedEvent(boolean connected) {
 			super("billingConnected");
 			this.connected = connected;
-		}
-	}
-
-	public class RestoreEvent extends com.tealeaf.event.Event {
-		String failure;
-		public RestoreEvent(String failure) {
-			super("billingRestore");
-			this.failure = failure;
 		}
 	}
 
@@ -307,7 +344,8 @@ public class BillingPlugin implements IPlugin {
 		}
 	}
 
-	public void getPurchases(String jsonData) {
+	// used for both restorePurchases and getPurchases
+	public PurchasesInfo getPurchasesFromStore() {
 		ArrayList<String> skus = new ArrayList<String>();
 		ArrayList<String> tokens = new ArrayList<String>();
 		ArrayList<String> signatures = new ArrayList<String>();
@@ -316,31 +354,34 @@ public class BillingPlugin implements IPlugin {
 
 		try {
 			logger.log("{billing} Getting prior purchases");
-
 			Bundle ownedItems = null;
 
 			synchronized (mServiceLock) {
 				if (mService == null) {
-					EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "service"));
-					return;
+					return new PurchasesInfo(null, null, null, null, "service");
 				}
 
-				ownedItems = mService.getPurchases(3, _ctx.getPackageName(), "inapp", null);
+				ownedItems = mService.getPurchases(
+						3,
+						_ctx.getPackageName(),
+						"inapp",
+						null
+					);
 			}
 
 			// If unable to create bundle,
 			int responseCode = ownedItems.getInt("RESPONSE_CODE", 1);
 			if (responseCode != 0) {
 				logger.log("{billing} WARNING: Failure to create owned items bundle:", responseCode);
-				EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "failed"));
+				return new PurchasesInfo(null, null, null, null, "failed");
 			} else {
-				ArrayList ownedSkus = 
+				ArrayList ownedSkus =
 					ownedItems.getStringArrayList("INAPP_PURCHASE_ITEM_LIST");
-				ArrayList purchaseDataList = 
+				ArrayList purchaseDataList =
 					ownedItems.getStringArrayList("INAPP_PURCHASE_DATA_LIST");
-				ArrayList signatureList = 
+				ArrayList signatureList =
 					ownedItems.getStringArrayList("INAPP_DATA_SIGNATURE_LIST");
-				//String continuationToken = 
+				//String continuationToken =
 				//	ownedItems.getString("INAPP_CONTINUATION_TOKEN");
 
 				for (int i = 0; i < ownedSkus.size(); ++i) {
@@ -361,18 +402,46 @@ public class BillingPlugin implements IPlugin {
 
 				// TODO: Use continuationToken to retrieve > 700 items
 
-				EventQueue.pushEvent(
-						new OwnedEvent(
+				return new PurchasesInfo(
 							skus, tokens, signatures, purchaseDataFullList, null
-						)
-					);
+						);
 			}
 		} catch (Exception e) {
 			logger.log("{billing} WARNING: Failure in getPurchases:", e);
 			e.printStackTrace();
-			EventQueue.pushEvent(new OwnedEvent(null, null, null, null, "failed"));
 		}
+
+		return new PurchasesInfo(null, null, null, null, "failed");
 	}
+
+	public void getPurchases(String jsonData) {
+		PurchasesInfo purchasesInfo = getPurchasesFromStore();
+		EventQueue.pushEvent(
+			new OwnedEvent(
+				purchasesInfo.skus,
+				purchasesInfo.tokens,
+				purchasesInfo.signatures,
+				purchasesInfo.purchaseData,
+				purchasesInfo.failure
+				)
+			);
+	}
+
+	// getPurchases and restoreCompleted do the same thing on android
+	// but have different event names
+	public void restoreCompleted(String jsonData) {
+		PurchasesInfo purchasesInfo = getPurchasesFromStore();
+		EventQueue.pushEvent(
+			new RestoreEvent(
+				purchasesInfo.skus,
+				purchasesInfo.tokens,
+				purchasesInfo.signatures,
+				purchasesInfo.purchaseData,
+				purchasesInfo.failure
+				)
+			);
+	}
+
 
 	private String getResponseCode(Intent data) {
 		try {
@@ -428,7 +497,6 @@ public class BillingPlugin implements IPlugin {
 						switch (resultCode) {
 							case Activity.RESULT_OK:
 								String token = jo.getString("purchaseToken");
-
 								logger.log("{billing} Successfully purchased SKU:", sku);
 								EventQueue.pushEvent(new PurchaseEvent(sku, token, dataSignature, purchaseData, null));
 								break;
@@ -448,11 +516,6 @@ public class BillingPlugin implements IPlugin {
 				EventQueue.pushEvent(new PurchaseEvent(null, null, null, null, "failed"));
 			}
 		}
-	}
-
-	public void restoreCompleted(String jsonData) {
-		logger.log("{billing} WARNING: Restore does nothing on android");
-		EventQueue.pushEvent(new RestoreEvent("not implemented for android"));
 	}
 
 	public void localizePurchases(String jsonData) {
@@ -522,7 +585,7 @@ public class BillingPlugin implements IPlugin {
 			int response = skuDetails.getInt("RESPONSE_CODE");
 			if (response == 0) {
 				ArrayList<String> responseList = skuDetails.getStringArrayList("DETAILS_LIST");
-
+				logger.log("{billing} Received purchase details from play store");
 				try {
 					// for every item requested
 					for (String thisResponse : responseList) {
@@ -540,7 +603,7 @@ public class BillingPlugin implements IPlugin {
 						// http://developer.android.com/google/play/billing/billing_reference.html#getSkuDetails
 					}
 				} catch (JSONException e) {
-					logger.log("{billing} WARINNG: Exception while building localizedPurchase response:", e);
+					logger.log("{billing} WARNING: Exception while building localizedPurchase response:", e);
 				}
 			} else {
 				logger.log("{billing} WARNING: Non-Success response while localizing purchases", response);
@@ -551,6 +614,7 @@ public class BillingPlugin implements IPlugin {
 			localized += BATCH_SIZE;
 		}
 
+		logger.log("{billing} Successfully Localized Purchases", skus);
 		EventQueue.pushEvent(new PurchasesLocalizedEvent(
 					skus, titles, descriptions, displayPrices, currencyCodes, null
 				)
