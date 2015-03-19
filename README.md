@@ -11,7 +11,7 @@ a working example of the various billing features.
 Install the billing module using the standard devkit install process:
 
 ~~~
-devkit install https://github.com/gameclosure/billing#v3.0.1
+devkit install https://github.com/gameclosure/billing#v3.2.0
 ~~~
 
 You can now import the billing object anywhere in your application:
@@ -23,13 +23,22 @@ import billing;
 
 ### iOS Setup
 
-For iOS you should ensure that your game's `manifest.json` has the correct "bundleID", "appleID", and "version" fields.
+For iOS you should ensure that your game's `manifest.json` has the correct
+"bundleID", "appleID", and "version" fields.
 
-The store item Product IDs must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
+The store item Product IDs must be prefixed with your bundleID (as in
+"com.gameshop.sword"), but you should refer to the item as "sword" in
+your JavaScript code.
 
-If any of your in-app purchases are managed instead of consumable then you will need to make additional changes.  To be accepted on the iOS app store you must have a [Restore Purchases] button.  See the `Restoring Purchases` section below for details.
+If any of your in-app purchases are managed instead of consumable then you will
+need to make additional changes.  To be accepted on the iOS app store you must
+have a [Restore Purchases] button.  See the `Restoring Purchases` section below
+for details.
 
-After building your game, you will need to turn on the IAP entitlement.  This can be done by selecting your project, choosing the "Capabilities" tab, and turning on the In-App Purchase entitlement.  You will be prompted to log in to your development team.
+After building your game, you will need to turn on the IAP entitlement.  This
+can be done by selecting your project, choosing the "Capabilities" tab, and
+turning on the In-App Purchase entitlement.  You will be prompted to log in to
+your development team.
 
 
 ### Android - Google Play Store Setup
@@ -192,6 +201,59 @@ restoration completes, or if the restoration failed and why.
 If an in-game button press triggers `billing.restore` then the button should be
 disabled until the result comes back to your callback.
 
+
+## Localizing Purchases
+
+The billing plugin can query the store for localized information about your
+purchases so that you can display formatted, region-specific labels and prices
+to your users. You can request the localized purchase information by sending a
+list of purchase ids to `billing.getLocalizedPurchases` and adding a listener
+for the `PurchasesLocalized` event.
+
+NOTE: on Android, the `PurchasesLocalized` event will only be emitted in
+response to a `getLocalizedPurchases` request, with just the requested
+item ids. On iOS, however, `PurchasesLocalized` will be emitting every time
+`getLocalizedPurchases` is called AND every time a purchase is made for
+an item that has not yet been localized or purchased and will include
+every purchase id localized or purchased that session. Ensure your handler
+for `PurchasesLocalized` correctly handles all of the above cases.
+
+The `PurchasesLocalized` event payload includes a `purchases` dictionary
+in the following format:
+```
+purchases: {
+    store_id_for_item: {
+        title: 'localized title for this item',
+        description: 'localized description for this item',
+        displayPrice: 'localized price for item, including currency symbol'
+    },
+    ...
+}
+```
+
+Example Localization Handler and Request:
+~~~
+// listen for localization events
+billing.on("PurchasesLocalized", function (data) {
+  logger.log("billing.PurchasesLocalized", data);
+  var itemIds = Object.keys(data.purchases);
+  for (var i = 0; i < itemIds.length; i++) {
+    var itemId = itemIds[i];
+    var item = data.purchases[itemId];
+    logger.log(
+        'Localized: ',
+        itemId,
+        item.displayPrice,
+        item.title,
+        item.description
+    );
+  }
+});
+
+// send the localization request
+billing.getLocalizedPurchases(['item1', 'item2']);
+~~~
+
 # billing object
 
 ## Events
@@ -207,6 +269,17 @@ billing.on('MarketAvailable', function (available) {
 	}
 });
 ~~~
+
+
+### "PurchasesLocalized"
+
+This event fires after purchases have been localized. On iOS, this includes
+every localized/purchased item and also fires any time a purchase is
+attempted with an item that has not yet been localized or purchased. On android,
+this is only fired in response to a `getLocalizedPurchases` request and only
+includes the items specifically requested. See the Localizing Purchases section
+for more info and example usage.
+
 
 Read the [event system documentation](http://docs.gameclosure.com/api/event.html)
 for other ways to handle these events.

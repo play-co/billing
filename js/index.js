@@ -136,21 +136,21 @@ function simulatePurchase(item, simulate) {
 				setTimeout(function() {
 					logger.log("Simulating item consume:", item);
 					consumePurchasedItem(item);
-				}, 2000);
+				}, 200);
 			} else {
 				logger.log("Item is already purchased.");
 				if (typeof onFailure === "function") {
 					onFailure("already owned", item);
 				}
 			}
-		}, 2000);
+		}, 200);
 	} else {
 		setTimeout(function() {
 			logger.log("Simulating item failure:", item);
 			if (typeof onFailure === "function") {
 				onFailure(simulate, item);
 			}
-		}, 1000);
+		}, 100);
 	}
 }
 
@@ -246,7 +246,22 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing fake billing API");
 	billing.restore = function (cb) {
 		logger.log("{billing} simulating billing.restore");
-		setTimeout(function () { cb && cb(); }, 2000);
+		setTimeout(function () { cb && cb(); }, 200);
+	};
+
+	billing.getLocalizedPurchases = function (items) {
+		logger.log("{billing} simulating getting localized purchases");
+		setTimeout(function () {
+			var data = { purchases: {}, invalidProductIdentifiers: [] };
+			for (var i = 0; i < items.length; i++) {
+				data.purchases[items[i]] = {
+					title: items[i] + ' localized title',
+					description: items[i] + ' localized description',
+					displayPrice: '$0.99'
+				};
+			}
+			billing.emit('PurchasesLocalized', data);
+		}, 200);
 	};
 } else {
 	logger.log("Installing JS billing component for native");
@@ -295,6 +310,34 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 		if (typeof onRestore == "function") {
 			onRestore(evt.failure);
 		}
+	});
+
+	/**
+	 * Tell the stores to localize the purchases for the given items.
+	 * Will raise a purchasesLocalized event when finished.
+	 */
+	Billing.prototype.getLocalizedPurchases = function (items) {
+		NATIVE.plugins.sendEvent("BillingPlugin", "localizePurchases", JSON.stringify({
+			items: items
+		}));
+	};
+
+	NATIVE.events.registerHandler('purchasesLocalized', function (evt) {
+		logger.log("{billing} received localized purchases from native", evt);
+
+		// build into a dictionary
+		var data = {
+			purchases: {},
+			invalidProductIdentifiers: evt.invalidProductIdentifiers || []
+		};
+		for (var i = 0; i < evt.skus.length; i++) {
+			data.purchases[evt.skus[i]] = {
+				title: evt.titles[i],
+				description: evt.descriptions[i],
+				displayPrice: evt.displayPrices[i]
+			};
+		}
+		billing.emit('PurchasesLocalized', data);
 	});
 
 	// Request initial market state

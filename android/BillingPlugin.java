@@ -28,12 +28,27 @@ import android.util.Log;
 
 import android.content.ComponentName;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.app.PendingIntent;
 
 import com.tealeaf.EventQueue;
 import com.tealeaf.event.*;
 
 import com.android.vending.billing.IInAppBillingService;
+
+/*
+ * https://developer.android.com/google/play/billing/billing_reference.html
+ *
+ * BILLING_RESPONSE_RESULT_OK                   0  Success
+ * BILLING_RESPONSE_RESULT_USER_CANCELED        1  User pressed back or canceled a dialog
+ * BILLING_RESPONSE_RESULT_SERVICE_UNAVAILABLE  2  Network connection is down
+ * BILLING_RESPONSE_RESULT_BILLING_UNAVAILABLE  3  Billing API version is not supported for the type requested
+ * BILLING_RESPONSE_RESULT_ITEM_UNAVAILABLE     4  Requested product is not available for purchase
+ * BILLING_RESPONSE_RESULT_DEVELOPER_ERROR      5  Invalid arguments provided to the API. This error can also indicate that the application was not correctly signed or properly set up for In-app Billing in Google Play, or does not have the necessary permissions in its manifest
+ * BILLING_RESPONSE_RESULT_ERROR                6  Fatal error during the API action
+ * BILLING_RESPONSE_RESULT_ITEM_ALREADY_OWNED   7  Failure to purchase since item is already owned
+ * BILLING_RESPONSE_RESULT_ITEM_NOT_OWNED       8  Failure to consume since item is not owned
+ */
 
 public class BillingPlugin implements IPlugin {
 	Context _ctx = null;
@@ -98,6 +113,25 @@ public class BillingPlugin implements IPlugin {
 		String failure;
 		public RestoreEvent(String failure) {
 			super("billingRestore");
+			this.failure = failure;
+		}
+	}
+
+	public class PurchasesLocalizedEvent extends com.tealeaf.event.Event {
+		ArrayList<String> skus, titles, descriptions, displayPrices;
+		String failure;
+
+		public PurchasesLocalizedEvent(
+				ArrayList<String> skus,
+				ArrayList<String> titles,
+				ArrayList<String> descriptions,
+				ArrayList<String> displayPrices,
+				String failure) {
+			super("purchasesLocalized");
+			this.skus = skus;
+			this.titles = titles;
+			this.descriptions = descriptions;
+			this.displayPrices = displayPrices;
 			this.failure = failure;
 		}
 	}
@@ -321,7 +355,7 @@ public class BillingPlugin implements IPlugin {
 						signatures.add(signature);
 						purchaseDataFullList.add(purchaseData);
 					}
-				} 
+				}
 
 				// TODO: Use continuationToken to retrieve > 700 items
 
@@ -417,6 +451,106 @@ public class BillingPlugin implements IPlugin {
 	public void restoreCompleted(String jsonData) {
 		logger.log("{billing} WARNING: Restore does nothing on android");
 		EventQueue.pushEvent(new RestoreEvent("not implemented for android"));
+	}
+
+	public void localizePurchases(String jsonData) {
+
+		ArrayList<String> skus = new ArrayList<String>();
+		ArrayList<String> titles = new ArrayList<String>();
+		ArrayList<String> descriptions = new ArrayList<String>();
+		ArrayList<String> displayPrices = new ArrayList<String>();
+
+		JSONArray items = null;
+		ArrayList<String> itemList = new ArrayList<String> ();
+		try {
+			// get list of item ids from payload
+			JSONObject jsonObject = new JSONObject(jsonData);
+			items = jsonObject.getJSONArray("items");
+
+			int length = items.length();
+			for (int i = 0; i < length; i++) {
+				itemList.add(items.getString(i));
+			}
+		} catch (JSONException e) {
+			logger.log("{billing} WARNING: Failed to parse localizePurchase data:", e);
+			return;
+		}
+
+		synchronized (mServiceLock) {
+			// if service is not available, do nothing
+			if (mService == null) {
+				logger.log("{billing} WARNING: Market not available; localization request abandoned");
+				EventQueue.pushEvent(new PurchasesLocalizedEvent(
+							null, null, null, null, "failed"
+						)
+					);
+				return;
+			}
+		}
+
+
+		// create batches no longer than 20 items or InAppBillingManager rejects it
+		int localized = 0;
+		int BATCH_SIZE = 20; // InAppBillingManager throws errors otherwise
+
+		while (localized < itemList.size()) {
+			ArrayList<String> batchItems = new ArrayList(
+					itemList.subList(
+						localized,
+						Math.min(localized + BATCH_SIZE, itemList.size())
+					)
+				);
+
+			// from https://gist.github.com/first087/9088162
+			// and hashcube billing plugin https://github.com/hashcube/billing/commit/ccd811a652f2b89e996713a00db16e4c3563f786
+			final Bundle querySkus = new Bundle();
+			querySkus.putStringArrayList("ITEM_ID_LIST", batchItems);
+
+			Bundle skuDetails = null;
+			try {
+				skuDetails = mService.getSkuDetails(3, _ctx.getPackageName(), "inapp", querySkus);
+			} catch (RemoteException e) {
+				logger.log("{billing} WARNING: Exception while fetching purchase data:", e);
+				// TODO: handle batch failures better (currently just bails from everything)
+				return;
+			}
+
+			// get response code from bundle -- 0 means success
+			int response = skuDetails.getInt("RESPONSE_CODE");
+			if (response == 0) {
+				ArrayList<String> responseList = skuDetails.getStringArrayList("DETAILS_LIST");
+
+				try {
+					// for every item requested
+					for (String thisResponse : responseList) {
+						JSONObject object = new JSONObject(thisResponse);
+
+						// add everything to lists of fields to match existing
+						// getPurchases API
+						skus.add(object.getString("productId"));
+						titles.add(object.getString("title"));
+						descriptions.add(object.getString("description"));
+						displayPrices.add(object.getString("price"));
+
+						// other fields: price_amount_micros, price_currency_code
+						// http://developer.android.com/google/play/billing/billing_reference.html#getSkuDetails
+					}
+				} catch (JSONException e) {
+					logger.log("{billing} WARINNG: Exception while building localizedPurchase response:", e);
+				}
+			} else {
+				logger.log("{billing} WARNING: Non-Success response while localizing purchases");
+				return;
+			}
+
+			// increase index and run the next batch
+			localized += BATCH_SIZE;
+		}
+
+		EventQueue.pushEvent(new PurchasesLocalizedEvent(
+					skus, titles, descriptions, displayPrices, null
+				)
+			);
 	}
 
 	public void onNewIntent(Intent intent) {
