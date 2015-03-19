@@ -11,7 +11,7 @@ a working example of the various billing features.
 Install the billing module using the standard devkit install process:
 
 ~~~
-devkit install https://github.com/gameclosure/billing#v3.0.1
+devkit install https://github.com/gameclosure/billing#v3.2.0
 ~~~
 
 You can now import the billing object anywhere in your application:
@@ -23,13 +23,22 @@ import billing;
 
 ### iOS Setup
 
-For iOS you should ensure that your game's `manifest.json` has the correct "bundleID", "appleID", and "version" fields.
+For iOS you should ensure that your game's `manifest.json` has the correct
+"bundleID", "appleID", and "version" fields.
 
-The store item Product IDs must be prefixed with your bundleID (as in "com.gameshop.sword"), but you should refer to the item as "sword" in your JavaScript code.
+The store item Product IDs must be prefixed with your bundleID (as in
+"com.gameshop.sword"), but you should refer to the item as "sword" in
+your JavaScript code.
 
-If any of your in-app purchases are managed instead of consumable then you will need to make additional changes.  To be accepted on the iOS app store you must have a [Restore Purchases] button.  See the `Restoring Purchases` section below for details.
+If any of your in-app purchases are managed instead of consumable then you will
+need to make additional changes.  To be accepted on the iOS app store you must
+have a [Restore Purchases] button.  See the `Restoring Purchases` section below
+for details.
 
-After building your game, you will need to turn on the IAP entitlement.  This can be done by selecting your project, choosing the "Capabilities" tab, and turning on the In-App Purchase entitlement.  You will be prompted to log in to your development team.
+After building your game, you will need to turn on the IAP entitlement.  This
+can be done by selecting your project, choosing the "Capabilities" tab, and
+turning on the In-App Purchase entitlement.  You will be prompted to log in to
+your development team.
 
 
 ### Android - Google Play Store Setup
