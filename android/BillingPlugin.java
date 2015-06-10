@@ -118,7 +118,7 @@ public class BillingPlugin implements IPlugin {
 	}
 
 	public class PurchasesLocalizedEvent extends com.tealeaf.event.Event {
-		ArrayList<String> skus, titles, descriptions, displayPrices;
+		ArrayList<String> skus, titles, descriptions, displayPrices, currencyCodes;
 		String failure;
 
 		public PurchasesLocalizedEvent(
@@ -126,12 +126,14 @@ public class BillingPlugin implements IPlugin {
 				ArrayList<String> titles,
 				ArrayList<String> descriptions,
 				ArrayList<String> displayPrices,
+				ArrayList<String> currencyCodes,
 				String failure) {
 			super("purchasesLocalized");
 			this.skus = skus;
 			this.titles = titles;
 			this.descriptions = descriptions;
 			this.displayPrices = displayPrices;
+			this.currencyCodes = currencyCodes;
 			this.failure = failure;
 		}
 	}
@@ -459,6 +461,7 @@ public class BillingPlugin implements IPlugin {
 		ArrayList<String> titles = new ArrayList<String>();
 		ArrayList<String> descriptions = new ArrayList<String>();
 		ArrayList<String> displayPrices = new ArrayList<String>();
+		ArrayList<String> currencyCodes = new ArrayList<String>();
 
 		JSONArray items = null;
 		ArrayList<String> itemList = new ArrayList<String> ();
@@ -481,7 +484,7 @@ public class BillingPlugin implements IPlugin {
 			if (mService == null) {
 				logger.log("{billing} WARNING: Market not available; localization request abandoned");
 				EventQueue.pushEvent(new PurchasesLocalizedEvent(
-							null, null, null, null, "failed"
+							null, null, null, null, null, "failed"
 						)
 					);
 				return;
@@ -531,6 +534,7 @@ public class BillingPlugin implements IPlugin {
 						titles.add(object.getString("title"));
 						descriptions.add(object.getString("description"));
 						displayPrices.add(object.getString("price"));
+						currencyCodes.add(object.getString("price_currency_code"));
 
 						// other fields: price_amount_micros, price_currency_code
 						// http://developer.android.com/google/play/billing/billing_reference.html#getSkuDetails
@@ -539,7 +543,7 @@ public class BillingPlugin implements IPlugin {
 					logger.log("{billing} WARINNG: Exception while building localizedPurchase response:", e);
 				}
 			} else {
-				logger.log("{billing} WARNING: Non-Success response while localizing purchases");
+				logger.log("{billing} WARNING: Non-Success response while localizing purchases", response);
 				return;
 			}
 
@@ -548,7 +552,7 @@ public class BillingPlugin implements IPlugin {
 		}
 
 		EventQueue.pushEvent(new PurchasesLocalizedEvent(
-					skus, titles, descriptions, displayPrices, null
+					skus, titles, descriptions, displayPrices, currencyCodes, null
 				)
 			);
 	}
