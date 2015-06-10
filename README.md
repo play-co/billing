@@ -225,7 +225,8 @@ purchases: {
     store_id_for_item: {
         title: 'localized title for this item',
         description: 'localized description for this item',
-        displayPrice: 'localized price for item, including currency symbol'
+        displayPrice: 'localized price for item, including currency symbol',
+        currencyCode: 'localized currency code, ie: USD, GBP, EUR...'
     },
     ...
 }
@@ -245,7 +246,8 @@ billing.on("PurchasesLocalized", function (data) {
         itemId,
         item.displayPrice,
         item.title,
-        item.description
+        item.description,
+        item.currencyCode
     );
   }
 });
