@@ -257,7 +257,8 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 				data.purchases[items[i]] = {
 					title: items[i] + ' localized title',
 					description: items[i] + ' localized description',
-					displayPrice: '$0.99'
+					displayPrice: '$0.99',
+					currencyCode: 'USD'
 				};
 			}
 			billing.emit('PurchasesLocalized', data);
@@ -334,7 +335,8 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 			data.purchases[evt.skus[i]] = {
 				title: evt.titles[i],
 				description: evt.descriptions[i],
-				displayPrice: evt.displayPrices[i]
+				displayPrice: evt.displayPrices[i],
+				currencyCode: evt.currencyCodes[i],
 			};
 		}
 		billing.emit('PurchasesLocalized', data);

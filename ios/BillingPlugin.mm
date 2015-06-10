@@ -121,9 +121,10 @@
 				currentProduct = product;
 			}
 
-			// get the formatted price
+			// get the formatted price and currencyCode
 			[numberFormatter setLocale:product.priceLocale];
 			NSString *formattedPrice = [numberFormatter stringFromNumber:product.price];
+			NSString *formattedCurrencyCode = [numberFormatter currencyCode];
 
 			// get sku - strip bundle id if possible
 			sku = product.productIdentifier;
@@ -138,6 +139,7 @@
 			[self.localizedPurchases setObject:
 				[NSDictionary dictionaryWithObjectsAndKeys:
 					formattedPrice, @"displayPrice",
+					formattedCurrencyCode, @"currencyCode",
 					product.localizedTitle, @"title",
 					product.localizedDescription, @"description",
 					nil
@@ -446,6 +448,7 @@
 	NSMutableArray *titles = [NSMutableArray array];
 	NSMutableArray *descriptions = [NSMutableArray array];
 	NSMutableArray *displayPrices = [NSMutableArray array];
+	NSMutableArray *currencyCodes = [NSMutableArray array];
 
 	for (NSString *sku in self.localizedPurchases) {
 		NSDictionary *purchase = [self.localizedPurchases objectForKey:sku];
@@ -454,6 +457,7 @@
 		[titles addObject:[purchase valueForKey:@"title"]];
 		[descriptions addObject:[purchase valueForKey:@"description"]];
 		[displayPrices addObject:[purchase valueForKey:@"displayPrice"]];
+		[currencyCodes addObject:[purchase valueForKey:@"currencyCode"]];
 	}
 
 	[[PluginManager get] dispatchJSEvent:@{
@@ -462,6 +466,7 @@
 		@"titles": titles,
 		@"descriptions": descriptions,
 		@"displayPrices": displayPrices,
+		@"currencyCodes": currencyCodes,
 		@"invalidProductIdentifiers": self.invalidProducts
 	}];
 }
