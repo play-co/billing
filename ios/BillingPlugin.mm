@@ -116,6 +116,17 @@
 		for (SKProduct* product in products) {
 			NSLOG(@"{billing} Found product id=%@, title=%@", product.productIdentifier, product.localizedTitle);
 
+			// get actual sku
+			sku = product.productIdentifier;
+
+			// save the product data with actual key (NOT stripped)
+			[self.products setObject:product forKey:sku];
+
+			// strip bundle id if prefixed
+			if (sku != nil && [sku hasPrefix:self.bundleID]) {
+				sku = [sku substringFromIndex:bundleIDIndex];
+			}
+
 			// if this is the current purchase target
 			if ([sku isEqualToString:self.currentPurchaseSku]) {
 				currentProduct = product;
@@ -125,15 +136,6 @@
 			[numberFormatter setLocale:product.priceLocale];
 			NSString *formattedPrice = [numberFormatter stringFromNumber:product.price];
 			NSString *formattedCurrencyCode = [numberFormatter currencyCode];
-
-			// get sku - strip bundle id if possible
-			sku = product.productIdentifier;
-			if (sku != nil && [sku hasPrefix:self.bundleID]) {
-				sku = [sku substringFromIndex:bundleIDIndex];
-			}
-
-			// save the product data
-			[self.products setObject:product forKey:sku];
 
 			// save localized data
 			[self.localizedPurchases setObject:
