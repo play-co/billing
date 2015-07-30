@@ -12,8 +12,15 @@ import util.setProperty as setProperty;
 
 var purchasedItems = {};
 var consumedItems = {};
+var skipNativeConsume = {};
 var onPurchase; // callback after consumption
 var onFailure; // callback on purchase failure (not consume fail)
+
+// if true, will auto-consume items on startup (play store) and
+// on restore purchases (both, but only play store has an issue
+// since the app store manages non-consumables on its own). Disable
+// by calling billing.disableAutoConsumeOnRestore()
+var allowAutoConsumeOnRestore = true;
 
 /*
  * Read the list of consumed items during startup.
@@ -71,7 +78,7 @@ function creditConsumedItem(item) {
 			try {
 				onPurchase(item, transactionInfo);
 			} catch(e) {
-				logger.log("onPurchase CALLBACK FAILURE!")
+				logger.log("onPurchase CALLBACK FAILURE!", e)
 			}
 
 			delete consumedItems[item];
@@ -128,27 +135,39 @@ function creditAllConsumedItems() {
  * Run purchase simulation.
  */
 function simulatePurchase(item, simulate) {
+
+
+	var sku = item;
+	// if object - opting out of auto-consume
+	if (typeof item == 'object') {
+		sku = item.sku;
+		if ('consume' in item && !item.consume) {
+			skipNativeConsume[sku] = 1;
+		}
+	}
+
 	if (!simulate || simulate === "simulate") {
+		logger.log("{billing} Simulating item purchase:", sku);
 		setTimeout(function() {
-			logger.log("Simulating item purchase:", item);
-			if (!purchasedItems[item]) {
-				purchasedItem(item);
+			logger.log("{billing} purchasing ", sku);
+			if (!purchasedItems[sku]) {
+				purchasedItem(sku);
 				setTimeout(function() {
-					logger.log("Simulating item consume:", item);
-					consumePurchasedItem(item);
+					logger.log("{billing} Simulating item consume:", sku);
+					consumePurchasedItem(sku);
 				}, 200);
 			} else {
-				logger.log("Item is already purchased.");
+				logger.log("{billing} Item is already purchased.");
 				if (typeof onFailure === "function") {
-					onFailure("already owned", item);
+					onFailure("already owned", sku);
 				}
 			}
 		}, 200);
 	} else {
 		setTimeout(function() {
-			logger.log("Simulating item failure:", item);
+			logger.log("{billing} Simulating item failure:", sku);
 			if (typeof onFailure === "function") {
-				onFailure(simulate, item);
+				onFailure(simulate, sku);
 			}
 		}, 100);
 	}
@@ -221,6 +240,9 @@ var Billing = Class(Emitter, function (supr) {
 	};
 
 	this.purchase = simulatePurchase;
+	this.disableAutoConsumeOnRestore = function () {
+		allowAutoConsumeOnRestore = false;
+	};
 });
 
 var billing = new Billing;
@@ -268,7 +290,21 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	logger.log("Installing JS billing component for native");
 
 	// Override purchase function to hook into native
+	// if item is string (sku), item will be automatically consumed
+	// if item is object, `sku` field is required and item will be automatically
+	// consumed unless `consume` flag is set to false
 	Billing.prototype.purchase = function(item, simulate) {
+
+		var sku = item;
+
+		// if object - opting out of auto-consume
+		if (typeof item == 'object') {
+			sku = item.sku;
+			if ('consume' in item && !item.consume) {
+				skipNativeConsume[sku] = 1;
+			}
+		}
+
 		if (simulate) {
 			if (simulate == "simulate") {
 				NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
@@ -293,7 +329,7 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 			}
 		} else {
 			NATIVE.plugins.sendEvent("BillingPlugin", "purchase", JSON.stringify({
-				"sku": item
+				"sku": sku
 			}));
 		}
 	};
@@ -309,6 +345,30 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 		logger.log("Got billingRestore event:", JSON.stringify(evt));
 
 		if (typeof onRestore == "function") {
+			readPurchases = true;
+
+			// Add owned items
+			var skus = evt.skus;
+			var tokens = evt.tokens;
+			var signatures = evt.signatures || [];
+			var purchaseData = evt.purchaseData || [];
+			if (skus && skus.length > 0) {
+				for (var ii = 0, len = skus.length; ii < len; ++ii) {
+
+					// do NOT auto-consume items that come back as 'owned'
+					if (!allowAutoConsumeOnRestore) {
+						skipNativeConsume[skus[ii]] = 1;
+					}
+
+					nativePurchasedItem(
+						skus[ii],
+						tokens[ii],
+						signatures[ii],
+						purchaseData[ii]
+					);
+				}
+			}
+
 			onRestore(evt.failure);
 		}
 	});
@@ -318,9 +378,14 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 	 * Will raise a purchasesLocalized event when finished.
 	 */
 	Billing.prototype.getLocalizedPurchases = function (items) {
-		NATIVE.plugins.sendEvent("BillingPlugin", "localizePurchases", JSON.stringify({
-			items: items
-		}));
+		if (items) {
+			logger.log("{billing} attempting to localize " + items.length + " purchases");
+			NATIVE.plugins.sendEvent("BillingPlugin", "localizePurchases", JSON.stringify({
+				items: items
+			}));
+		} else {
+			logger.error("{billing} failed to localize purchases: invalid items list");
+		}
 	};
 
 	NATIVE.events.registerHandler('purchasesLocalized', function (evt) {
@@ -355,10 +420,24 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 		// Record purchases
 		purchasedItem(sku);
 
-		// Attempt to consume it immediately
-		NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
-			token: token
-		}));
+		// check if sku is not in skipNativeConsume
+		var consumeItem = true;
+		if (skipNativeConsume[sku]) {
+			delete skipNativeConsume[sku];
+			consumeItem = false;
+		}
+
+		if (consumeItem) {
+			// tell native to consume item from the store
+			logger.log("{billing} Consuming item", sku);
+			NATIVE.plugins.sendEvent("BillingPlugin", "consume", JSON.stringify({
+				token: token
+			}));
+		} else {
+			// skip native consume if non-consumable/managed item
+			logger.log("{billing} Not consuming managed item", sku);
+			consumePurchasedItem(sku); // THIS SHOULD BE PURCHASE, NOT SKU
+		}
 	}
 
 	NATIVE.events.registerHandler('billingPurchase', function(evt) {
@@ -435,6 +514,12 @@ if (!GLOBAL.NATIVE || device.isSimulator || DEBUG) {
 			var purchaseData = evt.purchaseData || [];
 			if (skus && skus.length > 0) {
 				for (var ii = 0, len = skus.length; ii < len; ++ii) {
+
+					// do NOT auto-consume items that come back as 'owned'
+					if (!allowAutoConsumeOnRestore) {
+						skipNativeConsume[skus[ii]] = 1;
+					}
+
 					nativePurchasedItem(
 						skus[ii],
 						tokens[ii],
