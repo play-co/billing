@@ -44,7 +44,10 @@
 - (void) completeTransaction:(SKPaymentTransaction *)transaction {
 	NSString *sku = transaction.payment.productIdentifier;
 	NSString *token = transaction.transactionIdentifier;
-	NSData *receipt = transaction.transactionReceipt;
+	// this is the transactionReceipt, not the app receipt
+	/* NSData *receipt = transaction.transactionReceipt; */
+	NSURL *receiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+	NSData *receipt = [NSData dataWithContentsOfURL:receiptURL];
 	NSString *signature = nil;
 	if (receipt) {
 		signature = [receipt base64EncodedString];
