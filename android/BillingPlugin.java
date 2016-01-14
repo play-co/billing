@@ -208,9 +208,9 @@ public class BillingPlugin implements IPlugin {
 
 		_activity = activity;
 
-		_ctx.bindService(new 
-				Intent("com.android.vending.billing.InAppBillingService.BIND"),
-				mServiceConn, Context.BIND_AUTO_CREATE);
+		Intent serviceIntent = new Intent("com.android.vending.billing.InAppBillingService.BIND");
+		serviceIntent.setPackage("com.android.vending");
+		_ctx.bindService(serviceIntent, mServiceConn, Context.BIND_AUTO_CREATE);
 	}
 
 	public void onResume() {
